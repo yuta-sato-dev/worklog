@@ -12,7 +12,7 @@ GitHubの[最新リリース](../../releases/latest)から、自分の環境に�
 | Intel Mac | 名前に `x64` を含む `.dmg` | DMGを開き、WorklogをApplicationsへ移動 |
 | Windows 10/11（64-bit） | `x64-setup.exe` | EXEを実行し、スタートメニューからWorklogを起動 |
 
-macOS版はApple Developer ID署名とAppleのnotarizationを設定したうえで配布します。もし「Appleは、“Worklog”にMacに損害を与えたり、プライバシーを侵害する可能性のあるマルウェアが含まれていないことを検証できませんでした」と表示される場合、そのDMGは未公証の配布物です。新しいリリースを使うか、一時的にWorklogを右クリックして「開く」を選び、それでも止まる場合は「システム設定 → プライバシーとセキュリティ」でWorklogの起動を許可してください。
+現在のmacOS版は、Apple Developer ID署名とAppleのnotarizationを行っていません。初回起動時に「Appleは、“Worklog”にMacに損害を与えたり、プライバシーを侵害する可能性のあるマルウェアが含まれていないことを検証できませんでした」と表示される場合は、Worklogを右クリックして「開く」を選び、それでも止まる場合は「システム設定 → プライバシーとセキュリティ」でWorklogの起動を許可してください。
 
 許可しても同じダイアログが再表示される場合は、ダウンロード由来のquarantine属性がアプリ内に残っている可能性があります。信頼できる自分のビルドだけ、次のコマンドで解除できます。
 
@@ -151,6 +151,6 @@ GitHub ActionsでmacOSの公証済みDMGを作るには、リポジトリのActi
 base64 -i AuthKey_XXXXXXXXXX.p8 | tr -d '\n' | pbcopy
 ```
 
-macOS向けにDeveloper ID証明書で署名する場合はnotarizationが必要です。未設定のままmacOSリリースを作ろうとすると、CIは失敗して未公証DMGの公開を止めます。
+macOS向けにDeveloper ID証明書で署名する場合はnotarizationが必要です。6つのSecretsがすべて未設定の場合、CIは公証なしのDMGを作って公開します。一部だけ設定されている場合は、設定漏れとしてCIを失敗させます。
 
 開発中にこのMacだけでアクセシビリティ許可を安定させたい場合は、ログインキーチェーンに `Worklog Local Code Signing` というコード署名IDを作成して使えます。`scripts/build-app.sh` はこの署名IDが存在する場合、macOSビルド時に自動で `APPLE_SIGNING_IDENTITY=Worklog Local Code Signing` を使います。これは他のMacへ配布するための署名ではありません。

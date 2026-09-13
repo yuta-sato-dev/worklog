@@ -60,14 +60,28 @@ jobs:
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version 2.11.4 --locked
       - name: Prepare Apple notarization key
+        id: apple
         if: runner.os == 'macOS'
         shell: bash
         env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
         run: |
-          if [[ -z "$APPLE_API_KEY" || -z "$APPLE_API_KEY_BASE64" ]]; then
-            printf 'APPLE_API_KEY and APPLE_API_KEY_BASE64 secrets are required for notarized macOS releases.\n' >&2
+          missing=()
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_API_KEY APPLE_API_ISSUER APPLE_API_KEY_BASE64; do
+            [[ -z "${!name}" ]] && missing+=("$name")
+          done
+          if [[ ${#missing[@]} -eq 6 ]]; then
+            printf '::warning::Apple secrets are not configured. Building an unnotarized macOS DMG.\n'
+            printf 'notarize=false\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            printf 'Missing Apple secrets for notarization: %s\n' "${missing[*]}" >&2
             exit 1
           fi
           mkdir -p "$RUNNER_TEMP/apple-notary"
@@ -75,7 +89,18 @@ jobs:
           printf '%s' "$APPLE_API_KEY_BASE64" | base64 -D > "$key_path"
           chmod 600 "$key_path"
           printf 'APPLE_API_KEY_PATH=%s\n' "$key_path" >> "$GITHUB_ENV"
+          printf 'notarize=true\n' >> "$GITHUB_OUTPUT"
+      # Empty APPLE_* variables make the bundler try to import a blank certificate.
       - name: Build installer
+        if: steps.apple.outputs.notarize != 'true'
+        uses: tauri-apps/tauri-action@action-v1.0.0
+        with:
+          tauriScript: cargo tauri
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} -- --locked
+          uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: installer-[platform]-[arch]-[bundle]
+      - name: Build notarized installer
+        if: steps.apple.outputs.notarize == 'true'
         uses: tauri-apps/tauri-action@action-v1.0.0
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
