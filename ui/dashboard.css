@@ -133,6 +133,12 @@ progress::-moz-progress-bar { background: var(--color-accent); }
 .settings-bottom { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); font-size: var(--text-sm); }
 .main-shell > #error { margin: var(--space-md) var(--space-xl) 0; padding: var(--space-xs) var(--space-md); border-radius: var(--radius-control); font-size: var(--text-sm); }
 dialog { position: fixed; inset: 0; margin: auto; height: fit-content; max-height: 85vh; overflow-y: auto; }
+.title-segments { display: flex; flex-wrap: wrap; gap: var(--space-sm); margin: var(--space-md) 0 var(--space-sm); min-width: 0; }
+.title-segments button { max-width: 100%; min-height: 32px; padding: var(--space-2xs) var(--space-sm); border-color: var(--color-rule); border-radius: var(--radius-control); background: var(--color-surface); overflow-wrap: anywhere; white-space: normal; text-align: left; }
+.title-segments button[aria-pressed=true] { background: var(--color-tint); color: var(--color-accent); border-color: var(--color-accent); }
+.classify-match { min-height: 1.6em; margin: calc(-1 * var(--space-sm)) 0 0; color: var(--color-muted); font-size: var(--text-sm); }
+.classify-match:empty,.classify-examples:empty { display: none; }
+.classify-examples { margin: var(--space-2xs) 0 0; color: var(--color-muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
 @media (max-width: 1200px) { .dashboard-grid { grid-template-columns: minmax(0,1fr) 205px; gap: var(--space-md); } .page,#shared-day-toolbar { padding-inline: var(--space-lg); } .topbar { padding-inline: var(--space-lg); } }
 @media (max-width: 1000px) { .dashboard-grid { grid-template-columns: minmax(0,1fr); } .dashboard-aside { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: var(--space-md); } }
 @media (max-width: 800px) { .sidebar { position: static; width: auto; padding: var(--space-xs) var(--space-md); flex-direction: row; align-items: center; gap: var(--space-lg); border-right: none; border-bottom: 1px solid var(--color-rule); } .primary-nav { display: flex; margin: 0; } .sidebar-bottom { display: none; } .wordmark { padding: 0; } .main-shell { margin-left: 0; } }

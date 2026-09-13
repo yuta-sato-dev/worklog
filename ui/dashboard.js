@@ -133,7 +133,50 @@ function switchPage(){
   document.querySelectorAll('[data-page]').forEach(a=>a.dataset.page===page?a.setAttribute('aria-current','page'):a.removeAttribute('aria-current'));if(page==='settings'){loadAutostart();loadAccessibility();}
 }
 function moveDate(days){const d=new Date(`${$('date').value}T12:00:00`);d.setDate(d.getDate()+days);$('date').value=localDate(d);selectedProject='';pageIndex=0;refresh();}
-function classify(block){const f=$('rule-form');f.elements.app.value=block.app;f.elements.contains.value=block.title;f.elements.project.value=block.project||'';$('rule-error').textContent='';$('classify').showModal();}
+function titleSegments(title){
+  const seen=new Set(), parts=[];
+  for(const part of String(title||'').split(/\s+(?:—|–|-|·|\|)\s+/)){
+    const value=part.trim();
+    if(value&&!seen.has(value)){seen.add(value);parts.push(value);}
+  }
+  return parts;
+}
+function matchingSamples(app,contains){
+  const value=contains.trim();
+  if(!value)return [];
+  return samples.filter(s=>s.status!=='idle'&&s.app===app&&String(s.title||'').includes(value));
+}
+function classify(block){
+  const f=$('rule-form'), contains=f.elements.contains, segments=titleSegments(block.title), segmentGroup=$('title-segments');
+  f.elements.app.value=block.app;
+  contains.value=segments.length>1?segments[segments.length-1]:block.title;
+  f.elements.project.value=block.project||'';
+  $('rule-error').textContent='';
+  const updatePreview=()=>{
+    const value=contains.value.trim();
+    segmentGroup.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.value===value)));
+    const matches=matchingSamples(block.app,value);
+    $('classify-match').textContent=value?(matches.length?`表示中の日の記録 ${matches.length}件に一致します`:'表示中の日の記録には一致しません（ほかの日の記録には一致する場合があります）'):'';
+    const examples=[];
+    for(const match of matches){
+      const title=match.title||'タイトルを取得できません';
+      if(!examples.includes(title))examples.push(title);
+      if(examples.length>=3)break;
+    }
+    $('classify-examples').replaceChildren(...(value&&examples.length?[el('span',`例：${examples.join(' / ')}`)]:[]));
+  };
+  segmentGroup.replaceChildren(...segments.map(segment=>{
+    const button=el('button',segment);
+    button.type='button';
+    button.dataset.value=segment;
+    button.onclick=()=>{contains.value=segment;updatePreview();contains.focus();};
+    return button;
+  }));
+  segmentGroup.hidden=segments.length<2;
+  contains.oninput=updatePreview;
+  updatePreview();
+  $('classify').showModal();
+}
 
 $('rule-form').onsubmit=async e=>{e.preventDefault();e.submitter.disabled=true;try{await invoke('add_rule',Object.fromEntries(new FormData(e.currentTarget)));$('classify').close();await refresh();}catch(x){$('rule-error').textContent=String(x);}finally{e.submitter.disabled=false;}};
 $('cancel-rule').onclick=()=>$('classify').close(); $('classify').onclick=e=>{if(e.target===$('classify'))$('classify').close();}; $('memo').onclick=e=>{if(e.target===$('memo'))$('memo').close();};

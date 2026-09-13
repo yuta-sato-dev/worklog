@@ -14,7 +14,7 @@ All views share the compact sidebar, status, button styles, colors, type, and co
 
 ## Interaction
 
-- Dashboard: date navigation, newest-first grouped timeline, search and app/project filters, record classification, editable memo export.
+- Dashboard: date navigation, newest-first grouped timeline, search and app/project filters, record classification with selectable title segments and match counts, editable memo export.
 - Report: date-linked estimated work and idle totals, project totals, and app/title breakdowns.
 - Settings: explicit save for collection preferences; separate immediate login-start switch; clear inline errors. Preserve unsaved values during background refresh.
 - Closing the window hides the app; the menu-bar/tray icon reopens it. Explicit quit is available in settings and the tray.
