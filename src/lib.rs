@@ -123,6 +123,7 @@ pub fn capture() -> Result<Sample> {
 
 pub fn capture_with_settings(settings: &Settings) -> Result<Sample> {
     let now = Utc::now();
+    debug_capture("checking idle state");
     if mac::idle_seconds() >= f64::from(settings.idle_minutes) * 60.0 {
         return Ok(Sample {
             id: 0,
@@ -134,13 +135,17 @@ pub fn capture_with_settings(settings: &Settings) -> Result<Sample> {
             status: "idle".into(),
         });
     }
-    let window = active_win_pos_rs::get_active_window().map_err(|_| "前面ウィンドウを取得できません。macOSのアクセシビリティ／画面収録の権限を確認してください。".to_string())?;
+    debug_capture("getting active window");
+    let window = platform_active_window()?;
+    debug_capture("checking accessibility trust");
     let trusted = mac::accessibility_trusted(false);
+    debug_capture("getting accessibility title");
     let ax_title = if trusted {
-        mac::title(window.process_id as i32)
+        mac::title(window.process_id)
     } else {
         None
     };
+    debug_capture("building sample");
     let source = if ax_title.is_some() {
         "accessibility"
     } else if trusted {
@@ -159,12 +164,41 @@ pub fn capture_with_settings(settings: &Settings) -> Result<Sample> {
     Ok(Sample {
         id: 0,
         timestamp: now,
-        project: project_from_title(&window.app_name, &title),
-        app: window.app_name,
+        project: project_from_title(&window.app, &title),
+        app: window.app,
         title,
         source: source.into(),
         status: status.into(),
     })
+}
+
+fn debug_capture(message: &str) {
+    if std::env::var_os("WORKLOG_DEBUG_CAPTURE").is_some() {
+        eprintln!("worklog capture: {message}");
+    }
+}
+
+struct ActiveWindow {
+    app: String,
+    title: String,
+    process_id: i32,
+}
+
+fn platform_active_window() -> Result<ActiveWindow> {
+    #[cfg(target_os = "macos")]
+    {
+        mac::active_window().ok_or_else(|| "前面ウィンドウを取得できません。".to_string())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let window = active_win_pos_rs::get_active_window()
+            .map_err(|_| "前面ウィンドウを取得できません。".to_string())?;
+        Ok(ActiveWindow {
+            app: window.app_name,
+            title: window.title,
+            process_id: window.process_id as i32,
+        })
+    }
 }
 
 /// Returns whether this process is allowed to use the macOS Accessibility API.
@@ -335,7 +369,6 @@ mod mac {
         fn AXUIElementCopyAttributeValue(element: CF, attribute: CF, value: *mut CF) -> i32;
         fn AXUIElementSetMessagingTimeout(element: CF, timeout: f32) -> i32;
         fn AXIsProcessTrustedWithOptions(options: CF) -> u8;
-        fn CGEventSourceSecondsSinceLastEventType(state: i32, event: u32) -> f64;
     }
     #[link(name = "CoreFoundation", kind = "framework")]
     unsafe extern "C" {
@@ -355,11 +388,28 @@ mod mac {
         fn CFArrayGetValueAtIndex(array: CF, idx: isize) -> CF;
         fn CFBooleanGetTypeID() -> usize;
         fn CFBooleanGetValue(boolean: CF) -> bool;
+        fn CFDictionaryGetTypeID() -> usize;
+        fn CFDictionaryGetValueIfPresent(dictionary: CF, key: CF, value: *mut CF) -> bool;
+        fn CFNumberGetTypeID() -> usize;
+        fn CFNumberGetValue(number: CF, number_type: i32, value: *mut c_void) -> bool;
         fn CFGetTypeID(value: CF) -> usize;
         fn CFStringGetTypeID() -> usize;
         fn CFRelease(value: CF);
     }
+    #[link(name = "IOKit", kind = "framework")]
+    unsafe extern "C" {
+        fn IOServiceMatching(name: *const c_char) -> CF;
+        fn IOServiceGetMatchingService(master_port: u32, matching: CF) -> u32;
+        fn IORegistryEntryCreateCFProperty(entry: u32, key: CF, allocator: CF, options: u32) -> CF;
+        fn IOObjectRelease(object: u32) -> i32;
+    }
+    #[link(name = "CoreGraphics", kind = "framework")]
+    unsafe extern "C" {
+        fn CGWindowListCopyWindowInfo(option: u32, relative_to_window: u32) -> CF;
+    }
     const UTF8: u32 = 0x08000100;
+    const K_CF_NUMBER_SINT64_TYPE: i32 = 4;
+    const K_CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY: u32 = 1;
     pub fn accessibility_trusted(prompt: bool) -> bool {
         unsafe {
             if !prompt {
@@ -424,6 +474,98 @@ mod mac {
             value
         }
     }
+    unsafe fn number_value(value: CF) -> Option<i64> {
+        unsafe {
+            if CFGetTypeID(value) != CFNumberGetTypeID() {
+                return None;
+            }
+            let mut out = 0_i64;
+            CFNumberGetValue(
+                value,
+                K_CF_NUMBER_SINT64_TYPE,
+                (&mut out as *mut i64).cast(),
+            )
+            .then_some(out)
+        }
+    }
+    unsafe fn dictionary_value(dictionary: CF, key: CF) -> Option<CF> {
+        unsafe {
+            if CFGetTypeID(dictionary) != CFDictionaryGetTypeID() {
+                return None;
+            }
+            let mut value = ptr::null();
+            CFDictionaryGetValueIfPresent(dictionary, key, &mut value)
+                .then_some(value)
+                .filter(|value| !value.is_null())
+        }
+    }
+    unsafe fn cf_string(text: &str) -> Option<CF> {
+        let text = CString::new(text).ok()?;
+        unsafe {
+            let value = CFStringCreateWithCString(ptr::null(), text.as_ptr(), UTF8);
+            (!value.is_null()).then_some(value)
+        }
+    }
+    pub fn active_window() -> Option<super::ActiveWindow> {
+        unsafe {
+            let windows = CGWindowListCopyWindowInfo(K_CG_WINDOW_LIST_OPTION_ON_SCREEN_ONLY, 0);
+            if windows.is_null() || CFGetTypeID(windows) != CFArrayGetTypeID() {
+                if !windows.is_null() {
+                    CFRelease(windows);
+                }
+                return None;
+            }
+            if std::env::var_os("WORKLOG_DEBUG_CAPTURE").is_some() {
+                eprintln!(
+                    "worklog capture: coregraphics windows={}",
+                    CFArrayGetCount(windows)
+                );
+            }
+            let owner_pid_key = cf_string("kCGWindowOwnerPID")?;
+            let owner_name_key = cf_string("kCGWindowOwnerName")?;
+            let window_name_key = cf_string("kCGWindowName")?;
+            let layer_key = cf_string("kCGWindowLayer")?;
+            let mut out = None;
+            for i in 0..CFArrayGetCount(windows) {
+                let window = CFArrayGetValueAtIndex(windows, i);
+                if window.is_null() {
+                    continue;
+                }
+                let layer = dictionary_value(window, layer_key).and_then(|v| number_value(v));
+                if layer != Some(0) {
+                    continue;
+                }
+                let app = dictionary_value(window, owner_name_key).and_then(|v| string_value(v));
+                let process_id =
+                    dictionary_value(window, owner_pid_key).and_then(|v| number_value(v));
+                let Some(app) = app else {
+                    continue;
+                };
+                let Some(process_id) = process_id else {
+                    continue;
+                };
+                let title = dictionary_value(window, window_name_key).and_then(|v| string_value(v));
+                if std::env::var_os("WORKLOG_DEBUG_CAPTURE").is_some() {
+                    eprintln!(
+                        "worklog capture: coregraphics candidate app={app} pid={process_id} title={:?}",
+                        title
+                    );
+                }
+                out = Some(super::ActiveWindow {
+                    app,
+                    title: title.unwrap_or_default(),
+                    process_id: process_id as i32,
+                });
+                break;
+            }
+            CFRelease(owner_pid_key);
+            CFRelease(owner_name_key);
+            CFRelease(window_name_key);
+            CFRelease(layer_key);
+            CFRelease(windows);
+            out
+        }
+    }
     unsafe fn bool_attribute(element: CF, key: &str) -> Option<bool> {
         unsafe {
             let value = attribute(element, key)?;
@@ -479,7 +621,49 @@ mod mac {
         }
     }
     pub fn idle_seconds() -> f64 {
-        unsafe { CGEventSourceSecondsSinceLastEventType(1, u32::MAX) }
+        unsafe {
+            let service_name = CString::new("IOHIDSystem").ok();
+            let Some(service_name) = service_name else {
+                return 0.0;
+            };
+            let matching = IOServiceMatching(service_name.as_ptr());
+            if matching.is_null() {
+                return 0.0;
+            }
+            let service = IOServiceGetMatchingService(0, matching);
+            if service == 0 {
+                return 0.0;
+            }
+            let key = CString::new("HIDIdleTime").ok();
+            let Some(key) = key else {
+                let _ = IOObjectRelease(service);
+                return 0.0;
+            };
+            let key = CFStringCreateWithCString(ptr::null(), key.as_ptr(), UTF8);
+            if key.is_null() {
+                let _ = IOObjectRelease(service);
+                return 0.0;
+            }
+            let value = IORegistryEntryCreateCFProperty(service, key, ptr::null(), 0);
+            CFRelease(key);
+            let _ = IOObjectRelease(service);
+            if value.is_null() {
+                return 0.0;
+            }
+            let mut idle_ns: i64 = 0;
+            let valid = CFGetTypeID(value) == CFNumberGetTypeID()
+                && CFNumberGetValue(
+                    value,
+                    K_CF_NUMBER_SINT64_TYPE,
+                    (&mut idle_ns as *mut i64).cast(),
+                );
+            CFRelease(value);
+            if valid && idle_ns > 0 {
+                idle_ns as f64 / 1_000_000_000.0
+            } else {
+                0.0
+            }
+        }
     }
 }
 #[cfg(not(target_os = "macos"))]
