@@ -15,6 +15,7 @@ fs.mkdirSync(screenshotDir, { recursive: true });
  await page.addInitScript(()=>{
   let paused=false,rules=[],autostart=false,settings={interval_minutes:5,idle_minutes:5,excluded_apps:[]}; window.calls=[];
   const rows=[
+   {timestamp:'2026-09-13T08:55:00+09:00',interval_minutes:5,app:'システム設定',title:'',project:null,status:'title_unavailable',source:'none'},
    {timestamp:'2026-09-13T09:00:00+09:00',interval_minutes:5,app:'Code',title:'main.rs — worklog — Visual Studio Code',project:'worklog',status:'active',source:'title'},
    {timestamp:'2026-09-13T09:05:00+09:00',interval_minutes:5,app:'Code',title:'main.rs — worklog — Visual Studio Code',project:'worklog',status:'active',source:'title'},
    {timestamp:'2026-09-13T09:30:00+09:00',interval_minutes:5,app:'Firefox',title:'<img src=x onerror="window.INJECTED=1"> ChatGPT — 設計の相談',project:null,status:'active',source:'title'},
@@ -23,23 +24,25 @@ fs.mkdirSync(screenshotDir, { recursive: true });
   ];
   const summary={
    blocks:[
+    {start:'2026-09-13T08:55:00+09:00',end:'2026-09-13T09:00:00+09:00',seconds:300,app:'システム設定',title:'',project:null,status:'title_unavailable',source:'none',sample_count:1},
     {start:'2026-09-13T09:00:00+09:00',end:'2026-09-13T09:30:00+09:00',seconds:1800,app:'Code',title:'main.rs — worklog — Visual Studio Code',project:'worklog',status:'active',source:'title',sample_count:2},
     {start:'2026-09-13T09:30:00+09:00',end:'2026-09-13T09:35:00+09:00',seconds:300,app:'Firefox',title:'<img src=x onerror="window.INJECTED=1"> ChatGPT — 設計の相談',project:null,status:'active',source:'title',sample_count:1},
     {start:'2026-09-13T09:35:00+09:00',end:'2026-09-13T09:40:00+09:00',seconds:300,app:'',title:'',project:null,status:'idle',source:'idle',sample_count:1},
     {start:'2026-09-13T09:40:00+09:00',end:'2026-09-13T09:45:00+09:00',seconds:300,app:'Terminal',title:'Worklog — プロジェクトの作業',project:'Project'+ 'VeryLongName'.repeat(15),status:'active',source:'title',sample_count:1}
    ],
-   report:{work_seconds:2400,idle_seconds:300,projects:[
+   report:{work_seconds:2700,idle_seconds:300,projects:[
     {project:'worklog',seconds:1800,entries:[{app:'Code',title:'main.rs — worklog — Visual Studio Code',seconds:1800}]},
-    {project:null,seconds:300,entries:[{app:'Firefox',title:'<img src=x onerror="window.INJECTED=1"> ChatGPT — 設計の相談',seconds:300}]},
+    {project:null,seconds:600,entries:[{app:'システム設定',title:'',seconds:300},{app:'Firefox',title:'<img src=x onerror="window.INJECTED=1"> ChatGPT — 設計の相談',seconds:300}]},
     {project:'Project'+ 'VeryLongName'.repeat(15),seconds:300,entries:[{app:'Terminal',title:'Worklog — プロジェクトの作業',seconds:300}]}
    ]}
   };
   window.__TAURI__={core:{invoke:async(cmd,args)=>{window.calls.push({cmd,args}); if(cmd==='day')return rows;if(cmd==='day_summary')return summary;if(cmd==='status')return{paused,last_capture:'2026-09-13T09:40:00+09:00',next_capture:'2026-09-13T09:45:00+09:00',last_error:null,database:'/Users/example/Library/Application Support/jp.worklog/worklog.sqlite'};if(cmd==='rules')return rules;if(cmd==='get_settings')return settings;if(cmd==='save_settings'){settings=args.settings;return settings;}if(cmd==='get_autostart')return autostart;if(cmd==='set_autostart'){autostart=args.enabled;return;}if(cmd==='accessibility_status'||cmd==='request_accessibility_permission')return{supported:true,trusted:false,executable:'/Applications/Worklog.app/Contents/MacOS/worklog'};if(cmd==='quit_app')return;if(cmd==='set_paused'){paused=args.paused;return;}if(cmd==='add_rule'){rules.push({id:1,...args});return;}if(cmd==='delete_rule'){rules=[];return;}throw Error(cmd);}}};
  });
  await page.goto('http://worklog.test/index.html');
- await page.waitForFunction(()=>document.querySelector('#count').textContent==='4');
- assert.equal(await page.locator('#entries article').count(),4);
+ await page.waitForFunction(()=>document.querySelector('#count').textContent==='5');
+ assert.equal(await page.locator('#entries article').count(),5);
  assert.match(await page.locator('#entries article').first().textContent(),/Terminal/);
+ assert.equal(await page.locator('#entries article').filter({hasText:'システム設定'}).locator('button').count(),0);
  assert.match(await page.locator('#entries').textContent(),/30m/);
  assert.match(await page.locator('#entries').textContent(),/〜/);
  assert.equal(await page.locator('#entries img').count(),0);
@@ -75,6 +78,12 @@ fs.mkdirSync(screenshotDir, { recursive: true });
  await page.locator('[name=contains]').fill('存在しない文字列');assert.match(await page.locator('#classify-match').textContent(),/一致しません/);
  await page.locator('#title-segments button').filter({hasText:'Worklog'}).click();
  await page.locator('[name=project]').fill('Review project');await page.locator('#rule-form button[type=submit]').click();await page.waitForFunction(()=>!document.querySelector('#classify').open);assert.match(await page.locator('#rules').textContent(),/Review project/);
+ await page.locator('.activity-row button').first().click();assert.equal(await page.locator('#classify').evaluate(e=>e.open),true);
+ await page.locator('#title-segments button').filter({hasText:'Worklog'}).click();
+ assert.match(await page.locator('#classify-warning').textContent(),/同じ条件のルールがすでにあります/);
+ await page.locator('[name=contains]').fill('プロジェクトの作業');
+ assert.match(await page.locator('#classify-warning').textContent(),/既存のルール「Worklog」/);
+ await page.locator('#cancel-rule').click();await page.waitForFunction(()=>!document.querySelector('#classify').open);
  await page.locator('#pause').click();await page.waitForFunction(()=>document.querySelector('#status').textContent==='一時停止中');await page.locator('#pause').click();await page.waitForFunction(()=>document.querySelector('#status').textContent==='記録中 · 5分ごと');
  await page.locator('[data-page=settings]').click();await page.waitForFunction(()=>!document.querySelector('#settings-page').hidden);
  await page.waitForFunction(()=>document.querySelector('#accessibility-executable').textContent.includes('/Applications/Worklog.app'));
@@ -84,6 +93,6 @@ fs.mkdirSync(screenshotDir, { recursive: true });
  await page.locator('#autostart').check();await page.waitForFunction(()=>document.querySelector('#autostart-message').textContent.includes('自動で起動'));
  await page.locator('[data-page=dashboard]').click();await page.waitForFunction(()=>!document.querySelector('#dashboard-page').hidden);
  await page.locator('#export').click();const memo=await page.locator('#memo-text').inputValue();assert.match(memo,/ChatGPT/);assert.match(memo,/離席・操作なし/);assert.ok(memo.indexOf('Code')<memo.indexOf('Terminal'));await page.locator('#close-memo').click();
- assert.deepEqual(errors,[]);console.log(JSON.stringify({passed:true,layouts,checks:['unsafe title rendered as text','newest timeline first','duration and range','report page','search','classification save','pause/resume','accessibility permission','settings save','autostart','export oldest first','no runtime errors'],screenshots:path.join(screenshotDir, 'worklog-{width}.png')},null,2));
+ assert.deepEqual(errors,[]);console.log(JSON.stringify({passed:true,layouts,checks:['unsafe title rendered as text','newest timeline first','duration and range','title unavailable cannot classify','report page','search','classification save','duplicate classification warning','overlap classification warning','pause/resume','accessibility permission','settings save','autostart','export oldest first','no runtime errors'],screenshots:path.join(screenshotDir, 'worklog-{width}.png')},null,2));
  } finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exit(1)});

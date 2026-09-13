@@ -47,11 +47,11 @@ function blockTitle(b){
 function activityRow(b){
   const row=el('article','','activity-row'), clock=el('time',''); clock.dateTime=b.start;
   clock.append(el('span',timeRange(b),'time-range'),el('span',formatDuration(b.seconds),'duration-text'));
-  const idle=b.status==='idle', detail=el('div'); detail.append(el('span',blockTitle(b),'title-text'),el('span',b.app||`${settings.idle_minutes}分以上操作なし`,'app-name'));
+  const idle=b.status==='idle', canClassify=!idle&&String(b.title||'').trim(), detail=el('div'); detail.append(el('span',blockTitle(b),'title-text'),el('span',b.app||`${settings.idle_minutes}分以上操作なし`,'app-name'));
   const project=el('div','','project-cell'); project.append(el('span',idle?'—':b.project||'未分類','project-name'));
   if(!idle)project.append(el('span',b.source==='rule'?'分類ルール':b.project?'タイトルから推定':'プロジェクト不明','source-name'));
   row.append(clock,detail,project);
-  if(idle)row.append(document.createElement('span')); else { const button=el('button','分類','classify-button quiet-button'); button.type='button'; button.setAttribute('aria-label',`${timeRange(b)}の記録を分類`); button.onclick=()=>classify(b); row.append(button); }
+  if(!canClassify)row.append(document.createElement('span')); else { const button=el('button','分類','classify-button quiet-button'); button.type='button'; button.setAttribute('aria-label',`${timeRange(b)}の記録を分類`); button.onclick=()=>classify(b); row.append(button); }
   return row;
 }
 function renderReport(){
@@ -144,7 +144,30 @@ function titleSegments(title){
 function matchingSamples(app,contains){
   const value=contains.trim();
   if(!value)return [];
-  return samples.filter(s=>s.status!=='idle'&&s.app===app&&String(s.title||'').includes(value));
+  return samples.filter(s=>ruleMatches(s,{app,contains:value}));
+}
+function ruleMatches(sample,rule){
+  return sample.status!=='idle'&&sample.app===rule.app&&String(sample.title||'').includes(rule.contains);
+}
+function classifyWarning(app,contains,matches){
+  const value=contains.trim();
+  if(!value)return '';
+  const duplicate=rules.find(rule=>rule.app===app&&rule.contains===value);
+  if(duplicate)return `同じ条件のルールがすでにあります（→ ${duplicate.project}）。保存すると重複します。`;
+  const groups=new Map();
+  for(const match of matches){
+    const rule=rules.find(r=>ruleMatches(match,r));
+    if(!rule)continue;
+    const key=`${rule.contains}\n${rule.project}`;
+    const current=groups.get(key)||{rule,count:0};
+    current.count+=1;
+    groups.set(key,current);
+  }
+  if(!groups.size)return '';
+  const sorted=[...groups.values()].sort((a,b)=>b.count-a.count);
+  const total=sorted.reduce((sum,item)=>sum+item.count,0);
+  const labels=sorted.slice(0,2).map(({rule})=>`「${rule.contains}」で「${rule.project}」`).join('、');
+  return `このうち ${total}件は、既存のルール${labels}に分類されています。保存すると新しいルールが優先されます。`;
 }
 function classify(block){
   const f=$('rule-form'), contains=f.elements.contains, segments=titleSegments(block.title), segmentGroup=$('title-segments');
@@ -157,6 +180,7 @@ function classify(block){
     segmentGroup.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.value===value)));
     const matches=matchingSamples(block.app,value);
     $('classify-match').textContent=value?(matches.length?`表示中の日の記録 ${matches.length}件に一致します`:'表示中の日の記録には一致しません（ほかの日の記録には一致する場合があります）'):'';
+    $('classify-warning').textContent=classifyWarning(block.app,value,matches);
     const examples=[];
     for(const match of matches){
       const title=match.title||'タイトルを取得できません';
