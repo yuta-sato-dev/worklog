@@ -22,6 +22,12 @@ struct Status {
     database: String,
     next_capture: Option<String>,
 }
+#[derive(serde::Serialize)]
+struct AccessibilityStatus {
+    supported: bool,
+    trusted: bool,
+    executable: String,
+}
 #[tauri::command]
 fn day(date: String, state: tauri::State<AppState>) -> Result<Vec<Sample>, String> {
     state.0.lock().map_err(|e| e.to_string())?.store.day(&date)
@@ -94,16 +100,45 @@ fn save_settings(settings: Settings, state: tauri::State<AppState>) -> Result<Se
 }
 #[tauri::command]
 fn get_autostart(app: tauri::AppHandle) -> Result<bool, String> {
+    if cfg!(debug_assertions) {
+        return Ok(false);
+    }
     app.autolaunch().is_enabled().map_err(|e| e.to_string())
 }
 #[tauri::command]
 fn set_autostart(enabled: bool, app: tauri::AppHandle) -> Result<(), String> {
+    if cfg!(debug_assertions) {
+        return Err(
+            "開発版では自動起動を設定できません。インストール版から設定してください。".into(),
+        );
+    }
     if enabled {
         app.autolaunch().enable()
     } else {
         app.autolaunch().disable()
     }
     .map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn accessibility_status() -> AccessibilityStatus {
+    AccessibilityStatus {
+        supported: cfg!(target_os = "macos"),
+        trusted: fetch_focused_window::accessibility_trusted(false),
+        executable: std::env::current_exe()
+            .map(|path| path.display().to_string())
+            .unwrap_or_default(),
+    }
+}
+#[tauri::command]
+fn request_accessibility_permission() -> AccessibilityStatus {
+    let trusted = fetch_focused_window::accessibility_trusted(true);
+    AccessibilityStatus {
+        supported: cfg!(target_os = "macos"),
+        trusted,
+        executable: std::env::current_exe()
+            .map(|path| path.display().to_string())
+            .unwrap_or_default(),
+    }
 }
 #[tauri::command]
 fn quit_app(app: tauri::AppHandle) {
@@ -155,6 +190,13 @@ fn main() {
             let path = app.path().app_data_dir()?.join("worklog.sqlite3");
             let store = Store::open(&path).map_err(std::io::Error::other)?;
             let paused = store.paused().map_err(std::io::Error::other)?;
+            // A previous development/package build may have registered its own
+            // absolute executable path. Rewrite it from the app that is running
+            // now so login starts /Applications/Worklog.app after installation.
+            if !cfg!(debug_assertions) && app.autolaunch().is_enabled().unwrap_or(false) {
+                app.autolaunch().disable()?;
+                app.autolaunch().enable()?;
+            }
             app.manage(AppState(Mutex::new(Recorder { store, last_error: None, last_capture: None, next_capture: Instant::now() + Duration::from_secs(10) })));
             let show = tauri::menu::MenuItem::with_id(app, "show", "Worklogを開く", true, None::<&str>)?;
             let pause = tauri::menu::MenuItem::with_id(app, "pause", if paused { "記録を再開" } else { "記録を一時停止" }, true, None::<&str>)?;
@@ -178,7 +220,12 @@ fn main() {
             });
             if let Some(icon) = app.default_window_icon() { tray = tray.icon(icon.clone()); }
             tray.build(app)?;
-            if !std::env::args().any(|arg| arg == "--hidden") { show_main(app.handle()); }
+            if !std::env::args().any(|arg| arg == "--hidden") {
+                show_main(app.handle());
+                // Register the installed app itself with macOS TCC. A `cargo run`
+                // process and /Applications/Worklog.app are separate clients.
+                let _ = fetch_focused_window::accessibility_trusted(true);
+            }
             else if let Some(window) = app.get_webview_window("main") { window.hide()?; }
             let handle = app.handle().clone();
             std::thread::spawn(move || loop {
@@ -211,7 +258,7 @@ fn main() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![day, status, set_paused, rules, add_rule, delete_rule, get_settings, save_settings, get_autostart, set_autostart, quit_app])
+        .invoke_handler(tauri::generate_handler![day, status, set_paused, rules, add_rule, delete_rule, get_settings, save_settings, get_autostart, set_autostart, accessibility_status, request_accessibility_permission, quit_app])
         .run(tauri::generate_context!())
         .expect("Worklogを起動できませんでした");
 }

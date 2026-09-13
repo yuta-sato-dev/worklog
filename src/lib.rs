@@ -158,6 +158,13 @@ pub fn capture_with_settings(settings: &Settings) -> Result<Sample> {
     })
 }
 
+/// Returns whether this process is allowed to use the macOS Accessibility API.
+/// Passing `prompt = true` asks macOS to register and prompt for this exact
+/// executable. Other platforms do not require this permission.
+pub fn accessibility_trusted(prompt: bool) -> bool {
+    mac::accessibility_trusted(prompt)
+}
+
 pub struct Store(Connection);
 impl Store {
     pub fn open(path: &Path) -> Result<Self> {
@@ -314,13 +321,24 @@ mod mac {
     type CF = *const c_void;
     #[link(name = "ApplicationServices", kind = "framework")]
     unsafe extern "C" {
+        static kAXTrustedCheckOptionPrompt: CF;
         fn AXUIElementCreateApplication(pid: i32) -> CF;
         fn AXUIElementCopyAttributeValue(element: CF, attribute: CF, value: *mut CF) -> i32;
         fn AXUIElementSetMessagingTimeout(element: CF, timeout: f32) -> i32;
+        fn AXIsProcessTrustedWithOptions(options: CF) -> u8;
         fn CGEventSourceSecondsSinceLastEventType(state: i32, event: u32) -> f64;
     }
     #[link(name = "CoreFoundation", kind = "framework")]
     unsafe extern "C" {
+        static kCFBooleanTrue: CF;
+        fn CFDictionaryCreate(
+            allocator: CF,
+            keys: *const CF,
+            values: *const CF,
+            count: isize,
+            key_callbacks: CF,
+            value_callbacks: CF,
+        ) -> CF;
         fn CFStringCreateWithCString(allocator: CF, text: *const c_char, encoding: u32) -> CF;
         fn CFStringGetCString(string: CF, buffer: *mut c_char, size: isize, encoding: u32) -> bool;
         fn CFGetTypeID(value: CF) -> usize;
@@ -328,6 +346,29 @@ mod mac {
         fn CFRelease(value: CF);
     }
     const UTF8: u32 = 0x08000100;
+    pub fn accessibility_trusted(prompt: bool) -> bool {
+        unsafe {
+            if !prompt {
+                return AXIsProcessTrustedWithOptions(ptr::null()) != 0;
+            }
+            let keys = [kAXTrustedCheckOptionPrompt];
+            let values = [kCFBooleanTrue];
+            let options = CFDictionaryCreate(
+                ptr::null(),
+                keys.as_ptr(),
+                values.as_ptr(),
+                1,
+                ptr::null(),
+                ptr::null(),
+            );
+            if options.is_null() {
+                return false;
+            }
+            let trusted = AXIsProcessTrustedWithOptions(options) != 0;
+            CFRelease(options);
+            trusted
+        }
+    }
     unsafe fn attribute(element: CF, key: &str) -> Option<CF> {
         let key = CString::new(key).ok()?;
         unsafe {
@@ -379,6 +420,9 @@ mod mac {
 }
 #[cfg(not(target_os = "macos"))]
 mod mac {
+    pub fn accessibility_trusted(_: bool) -> bool {
+        true
+    }
     pub fn title(_: i32) -> Option<String> {
         None
     }

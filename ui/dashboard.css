@@ -97,6 +97,10 @@ progress::-moz-progress-bar { background: var(--color-accent); }
 .inline-message:empty { display: none; }
 .panel-description,.panel-content { padding: 0 var(--space-lg) var(--space-md); font-size: var(--text-sm); color: var(--color-muted); }
 .panel-content label { color: var(--color-ink); font-size: var(--text-sm); }
+.permission-card { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); margin: var(--space-sm) 0 var(--space-md); padding: var(--space-md); color: var(--color-ink); background: var(--color-paper); border: 1px solid var(--color-rule); border-radius: var(--radius-control); }
+.permission-card > div { min-width: 0; }
+.permission-card p { margin: var(--space-2xs) 0 0; }
+.permission-card button { flex-shrink: 0; }
 .panel-content details { padding: var(--space-xs) 0; }
 .panel-content details p { color: var(--color-muted); }
 .panel-content pre { font: var(--text-xs)/1.8 var(--font-mono); background: var(--color-paper); color: var(--color-ink); padding: var(--space-xs); overflow-wrap: anywhere; white-space: pre-wrap; border: 1px solid var(--color-rule); }
