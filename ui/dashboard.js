@@ -134,11 +134,12 @@ function switchPage(){
 }
 function moveDate(days){const d=new Date(`${$('date').value}T12:00:00`);d.setDate(d.getDate()+days);$('date').value=localDate(d);selectedProject='';pageIndex=0;refresh();}
 function titleSegments(title){
-  const seen=new Set(), parts=[];
+  const fullTitle=String(title||'').trim(), seen=new Set(), parts=[];
   for(const part of String(title||'').split(/\s+(?:—|–|-|·|\|)\s+/)){
     const value=part.trim();
     if(value&&!seen.has(value)){seen.add(value);parts.push(value);}
   }
+  if(fullTitle&&!seen.has(fullTitle))parts.push(fullTitle);
   return parts;
 }
 function matchingSamples(app,contains){
@@ -172,7 +173,8 @@ function classifyWarning(app,contains,matches){
 function classify(block){
   const f=$('rule-form'), contains=f.elements.contains, segments=titleSegments(block.title), segmentGroup=$('title-segments');
   f.elements.app.value=block.app;
-  contains.value=segments.length>1?segments[segments.length-1]:block.title;
+  const splitSegments=segments.filter(segment=>segment!==String(block.title||'').trim());
+  contains.value=splitSegments.length?splitSegments[splitSegments.length-1]:segments[0]||block.title;
   f.elements.project.value=block.project||'';
   $('rule-error').textContent='';
   const updatePreview=()=>{
@@ -193,11 +195,10 @@ function classify(block){
     const button=el('button',segment);
     button.type='button';
     button.dataset.value=segment;
-    button.onclick=()=>{contains.value=segment;updatePreview();contains.focus();};
+    button.onclick=()=>{contains.value=segment;updatePreview();};
     return button;
   }));
   segmentGroup.hidden=segments.length<2;
-  contains.oninput=updatePreview;
   updatePreview();
   $('classify').showModal();
 }
