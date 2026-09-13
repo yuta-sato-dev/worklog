@@ -120,11 +120,11 @@ erDiagram
     SAMPLES {
         integer id PK
         text timestamp
-        text data_json
+        text data
     }
     SETTINGS {
         text key PK
-        text value_json
+        text value
     }
     RULES {
         integer id PK
