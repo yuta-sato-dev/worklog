@@ -57,10 +57,10 @@ CursorにはVSCode同様のタイトル解析、Figmaには書類タイトルの
 
 ## Terminalのプロジェクト名
 
-zshの `~/.zshrc` に次を追加してください（この設定は自動では変更しません）。
+アプリの「設定 → ターミナルのプロジェクト名」に表示されるスニペットを、zshの `~/.zshrc` に追加してください（この設定は自動では変更しません）。ソースコードをcloneして使う場合は、次のようにclone先の絶対パスを指定する方法もあります。
 
 ```sh
-source /Users/yutasato/workspace/fetch-focused-window/scripts/terminal-title.zsh
+source /path/to/cloned/worklog/scripts/terminal-title.zsh
 ```
 
 新しいターミナルを開くと `worklog:/path/to/project` というウィンドウタイトルを設定します。Git内ではリポジトリルートを使用するため、`src/` に移動しても同じプロジェクトにまとまります。Git外では現在のフォルダ名になります。Terminalのプロファイル設定でタイトルが表示されるようにしてください。他のテーマ・シェル設定・tmuxがタイトルを上書きする場合は調整が必要です。コマンドや別プログラムが一時的にタイトルを変更すると、次のプロンプト表示までプロジェクトが不明になる場合があります。
