@@ -135,14 +135,23 @@ pub fn capture_with_settings(settings: &Settings) -> Result<Sample> {
         });
     }
     let window = active_win_pos_rs::get_active_window().map_err(|_| "前面ウィンドウを取得できません。macOSのアクセシビリティ／画面収録の権限を確認してください。".to_string())?;
-    let ax_title = mac::title(window.process_id as i32);
+    let trusted = mac::accessibility_trusted(false);
+    let ax_title = if trusted {
+        mac::title(window.process_id as i32)
+    } else {
+        None
+    };
     let source = if ax_title.is_some() {
         "accessibility"
-    } else {
+    } else if trusted {
         "window_title"
+    } else {
+        "accessibility_denied"
     };
     let title = ax_title.unwrap_or(window.title);
-    let status = if title.is_empty() {
+    let status = if !trusted && title.is_empty() {
+        "permission_required"
+    } else if title.is_empty() {
         "title_unavailable"
     } else {
         "captured"
@@ -341,6 +350,11 @@ mod mac {
         ) -> CF;
         fn CFStringCreateWithCString(allocator: CF, text: *const c_char, encoding: u32) -> CF;
         fn CFStringGetCString(string: CF, buffer: *mut c_char, size: isize, encoding: u32) -> bool;
+        fn CFArrayGetCount(array: CF) -> isize;
+        fn CFArrayGetTypeID() -> usize;
+        fn CFArrayGetValueAtIndex(array: CF, idx: isize) -> CF;
+        fn CFBooleanGetTypeID() -> usize;
+        fn CFBooleanGetValue(boolean: CF) -> bool;
         fn CFGetTypeID(value: CF) -> usize;
         fn CFStringGetTypeID() -> usize;
         fn CFRelease(value: CF);
@@ -383,6 +397,42 @@ mod mac {
             }
         }
     }
+    unsafe fn string_value(value: CF) -> Option<String> {
+        unsafe {
+            let mut buffer = vec![0u8; 32768];
+            let valid = CFGetTypeID(value) == CFStringGetTypeID()
+                && CFStringGetCString(
+                    value,
+                    buffer.as_mut_ptr().cast(),
+                    buffer.len() as isize,
+                    UTF8,
+                );
+            if !valid {
+                return None;
+            }
+            let end = buffer.iter().position(|&b| b == 0)?;
+            String::from_utf8(buffer[..end].to_vec())
+                .ok()
+                .filter(|s| !s.is_empty())
+        }
+    }
+    unsafe fn title_attribute(element: CF) -> Option<String> {
+        unsafe {
+            let title = attribute(element, "AXTitle")?;
+            let value = string_value(title);
+            CFRelease(title);
+            value
+        }
+    }
+    unsafe fn bool_attribute(element: CF, key: &str) -> Option<bool> {
+        unsafe {
+            let value = attribute(element, key)?;
+            let valid = CFGetTypeID(value) == CFBooleanGetTypeID();
+            let out = valid.then(|| CFBooleanGetValue(value));
+            CFRelease(value);
+            out
+        }
+    }
     pub fn title(pid: i32) -> Option<String> {
         unsafe {
             let app = AXUIElementCreateApplication(pid);
@@ -391,27 +441,41 @@ mod mac {
             }
             AXUIElementSetMessagingTimeout(app, 1.0);
             let window = attribute(app, "AXFocusedWindow");
+            if let Some(window) = window {
+                let title = title_attribute(window);
+                CFRelease(window);
+                if title.is_some() {
+                    CFRelease(app);
+                    return title;
+                }
+            }
+            let windows = attribute(app, "AXWindows");
             CFRelease(app);
-            let window = window?;
-            let title = attribute(window, "AXTitle");
-            CFRelease(window);
-            let title = title?;
-            let mut buffer = vec![0u8; 32768];
-            let valid = CFGetTypeID(title) == CFStringGetTypeID()
-                && CFStringGetCString(
-                    title,
-                    buffer.as_mut_ptr().cast(),
-                    buffer.len() as isize,
-                    UTF8,
-                );
-            CFRelease(title);
-            if !valid {
+            let windows = windows?;
+            if CFGetTypeID(windows) != CFArrayGetTypeID() {
+                CFRelease(windows);
                 return None;
             }
-            let end = buffer.iter().position(|&b| b == 0)?;
-            String::from_utf8(buffer[..end].to_vec())
-                .ok()
-                .filter(|s| !s.is_empty())
+            let mut first_title = None;
+            for i in 0..CFArrayGetCount(windows) {
+                let window = CFArrayGetValueAtIndex(windows, i);
+                if window.is_null() {
+                    continue;
+                }
+                let title = title_attribute(window);
+                if first_title.is_none() {
+                    first_title = title.clone();
+                }
+                if title.is_some()
+                    && (bool_attribute(window, "AXFocused").unwrap_or(false)
+                        || bool_attribute(window, "AXMain").unwrap_or(false))
+                {
+                    CFRelease(windows);
+                    return title;
+                }
+            }
+            CFRelease(windows);
+            first_title
         }
     }
     pub fn idle_seconds() -> f64 {

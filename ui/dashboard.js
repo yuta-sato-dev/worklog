@@ -33,9 +33,14 @@ function renderProjects(work){
   });
   $('project-list').replaceChildren(...nodes); if(!nodes.length)$('project-list').append(el('p','この日のプロジェクトはまだありません。'));
 }
+function sampleTitle(s){
+  if(s.status==='idle')return '離席・操作なし';
+  if(s.status==='permission_required')return 'アクセシビリティ権限が必要です';
+  return s.title||'タイトルを取得できません';
+}
 function activityRow(s){
   const row=el('article','','activity-row'), clock=el('time',time(s.timestamp)); clock.dateTime=s.timestamp;
-  const idle=s.status==='idle', detail=el('div'); detail.append(el('span',idle?'離席・操作なし':s.title||'タイトルを取得できません','title-text'),el('span',s.app||`${settings.idle_minutes}分以上操作なし`,'app-name'));
+  const idle=s.status==='idle', detail=el('div'); detail.append(el('span',sampleTitle(s),'title-text'),el('span',s.app||`${settings.idle_minutes}分以上操作なし`,'app-name'));
   const project=el('div','','project-cell'); project.append(el('span',idle?'—':s.project||'未分類','project-name'));
   if(!idle)project.append(el('span',s.source==='rule'?'分類ルール':s.project?'タイトルから推定':'プロジェクト不明','source-name'));
   row.append(clock,detail,project);
@@ -107,6 +112,6 @@ $('settings-form').oninput=()=>{settingsDirty=true;$('settings-message').textCon
 $('settings-form').onsubmit=async e=>{e.preventDefault();const b=$('save-settings');b.disabled=true;$('settings-message').textContent='保存中…';$('settings-message').dataset.error='false';const next={interval_minutes:Number($('interval').value),idle_minutes:Number($('idle').value),excluded_apps:$('excluded').value.split('\n').map(v=>v.trim()).filter(Boolean)};try{settings=await invoke('save_settings',{settings:next});settingsDirty=false;fillSettings();$('settings-message').textContent='保存しました。';await refresh();}catch(x){$('settings-message').textContent=String(x);$('settings-message').dataset.error='true';}finally{b.disabled=false;}};
 $('autostart').onchange=async()=>{const enabled=$('autostart').checked;$('autostart').disabled=true;$('autostart-message').textContent='変更中…';$('autostart-message').dataset.error='false';try{await invoke('set_autostart',{enabled});$('autostart-message').textContent=enabled?'次回のログインから自動で起動します。':'自動起動を解除しました。';}catch(e){$('autostart').checked=!enabled;$('autostart-message').textContent=String(e);$('autostart-message').dataset.error='true';}finally{$('autostart').disabled=false;}};
 $('request-accessibility').onclick=async()=>{$('request-accessibility').disabled=true;try{await invoke('request_accessibility_permission');$('accessibility-message').textContent='システム設定でWorklogを有効にし、アプリを再起動してください。';setTimeout(loadAccessibility,1500);}catch(e){$('accessibility-message').textContent=String(e);$('request-accessibility').disabled=false;}};
-$('export').onclick=()=>{$('memo-text').value=`${$('date').value} 稼働メモ\n※定期的な観測記録です。実働時間は別途確認。\n\n${samples.map(s=>`${time(s.timestamp)}  ${s.status==='idle'?'離席・操作なし':`[${s.project||'未分類'}] ${s.app} — ${s.title||'タイトル不明'}`}`).join('\n')}`;$('copy-status').textContent='';$('memo').showModal();};
+$('export').onclick=()=>{$('memo-text').value=`${$('date').value} 稼働メモ\n※定期的な観測記録です。実働時間は別途確認。\n\n${samples.map(s=>`${time(s.timestamp)}  ${s.status==='idle'?'離席・操作なし':`[${s.project||'未分類'}] ${s.app} — ${sampleTitle(s)}`}`).join('\n')}`;$('copy-status').textContent='';$('memo').showModal();};
 $('close-memo').onclick=()=>$('memo').close();$('copy').onclick=async()=>{try{await navigator.clipboard.writeText($('memo-text').value);$('copy-status').textContent='コピーしました。';}catch{$('memo-text').select();$('copy-status').textContent='⌘C または Ctrl+C でコピーしてください。';}};
 $('quit').onclick=async()=>{$('quit').disabled=true;await invoke('quit_app');};window.addEventListener('hashchange',switchPage);switchPage();refresh();setInterval(()=>{if(!$('classify').open&&!$('memo').open&&!settingsDirty)refresh();},15000);

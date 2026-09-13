@@ -132,6 +132,12 @@ fn accessibility_status() -> AccessibilityStatus {
 #[tauri::command]
 fn request_accessibility_permission() -> AccessibilityStatus {
     let trusted = fetch_focused_window::accessibility_trusted(true);
+    #[cfg(target_os = "macos")]
+    if !trusted {
+        let _ = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+            .spawn();
+    }
     AccessibilityStatus {
         supported: cfg!(target_os = "macos"),
         trusted,
@@ -249,7 +255,14 @@ fn main() {
                     Ok(sample) => {
                         if current.excludes(&sample.app) { recorder.last_error = None; continue; }
                         match recorder.store.append(&sample) {
-                            Ok(()) => { recorder.last_capture = Some(sample.timestamp.to_rfc3339()); recorder.last_error = if sample.status == "title_unavailable" { Some("タイトルを取得できません。アクセシビリティの権限を確認してください。".into()) } else { None }; }
+                            Ok(()) => {
+                                recorder.last_capture = Some(sample.timestamp.to_rfc3339());
+                                recorder.last_error = match sample.status.as_str() {
+                                    "permission_required" => Some("アクセシビリティ権限がありません。設定の「データと権限」で、このWorklogアプリ本体を許可してください。".into()),
+                                    "title_unavailable" => Some("前面アプリのタイトルを取得できませんでした。対象アプリがタイトルを公開していないか、ウィンドウがない可能性があります。".into()),
+                                    _ => None,
+                                };
+                            }
                             Err(e) => recorder.last_error = Some(e),
                         }
                     }
