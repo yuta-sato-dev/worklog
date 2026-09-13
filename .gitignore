@@ -1,0 +1,14 @@
+/target
+/src-tauri/target
+/src-tauri/gen/schemas
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
+
+# Private local work records; never include in source releases.
+/memo.txt
+/cron.log
+.DS_Store
+.hallmark/
+.idea/
+.vscode/

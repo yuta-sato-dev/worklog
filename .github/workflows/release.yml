@@ -1,0 +1,107 @@
+name: Build installers
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate release version
+        id: version
+        shell: python
+        run: |
+          import json, os, tomllib
+          from pathlib import Path
+          version = json.loads(Path('src-tauri/tauri.conf.json').read_text())['version']
+          cargo_version = tomllib.loads(Path('src-tauri/Cargo.toml').read_text())['package']['version']
+          assert version == cargo_version, 'Tauri and Cargo versions must match'
+          tag = f'v{version}'
+          if os.environ['GITHUB_REF'].startswith('refs/tags/'):
+              assert os.environ['GITHUB_REF_NAME'] == tag, 'Tag must match the app version'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'tag={tag}\n')
+
+  installers:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            bundles: dmg
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            bundles: dmg
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Test core
+        run: cargo test --locked
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version 2.11.4 --locked
+      - name: Build installer
+        uses: tauri-apps/tauri-action@action-v1.0.0
+        with:
+          tauriScript: cargo tauri
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} -- --locked
+          uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: installer-[platform]-[arch]-[bundle]
+
+  release:
+    needs: [version, installers]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ needs.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Download installers
+        uses: actions/download-artifact@v8
+        with:
+          pattern: installer-*
+          path: release-assets
+          merge-multiple: true
+      - name: Create or update release
+        shell: bash
+        run: |
+          mapfile -d '' assets < <(find release-assets -type f \( -name '*.dmg' -o -name '*-setup.exe' \) -print0)
+          if [[ ${#assets[@]} -ne 3 ]]; then
+            printf 'Expected 3 installers, found %s\n' "${#assets[@]}" >&2
+            find release-assets -type f -print >&2
+            exit 1
+          fi
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --target "$GITHUB_SHA" \
+              --title "Worklog $RELEASE_TAG" \
+              --notes-file .github/release-notes.md \
+              --draft
+          fi
+          gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+          gh release edit "$RELEASE_TAG" \
+            --title "Worklog $RELEASE_TAG" \
+            --notes-file .github/release-notes.md \
+            --draft=false \
+            --latest

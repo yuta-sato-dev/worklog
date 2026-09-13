@@ -1,0 +1,20 @@
+:root {
+  --color-paper: oklch(98% 0.006 258); --color-surface: oklch(100% 0 0);
+  --color-ink: oklch(25% 0.022 258); --color-muted: oklch(48% 0.025 258);
+  --color-rule: oklch(88% 0.012 258); --color-accent: oklch(47% 0.21 264);
+  --color-tint: oklch(95% 0.025 264); --color-accent-ink: oklch(100% 0 0);
+  --color-error: oklch(43% 0.16 27); --color-error-bg: oklch(97% 0.015 27);
+  --color-backdrop: oklch(25% 0.022 258 / 0.4);
+  --font-body: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif;
+  --font-display: var(--font-body); --font-mono: 'SFMono-Regular', Menlo, monospace;
+  --radius-control: 6px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px;
+}
+:root {
+  --color-hover: oklch(96% 0.008 258);
+  --color-success: oklch(40% 0.10 155);
+  --color-success-bg: oklch(96% 0.018 155);
+  --color-transparent: transparent;
+  --radius-panel: 10px;
+  --space-2xs: 4px; --space-xs: 12px; --space-xl: 32px; --space-2xl: 48px;
+  --text-xs: 11px; --text-sm: 12px; --text-body: 14px; --text-lg: 16px; --text-heading: 22px;
+}
