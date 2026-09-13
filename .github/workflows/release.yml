@@ -59,8 +59,30 @@ jobs:
         run: cargo test --locked
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version 2.11.4 --locked
+      - name: Prepare Apple notarization key
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+        run: |
+          if [[ -z "$APPLE_API_KEY" || -z "$APPLE_API_KEY_BASE64" ]]; then
+            printf 'APPLE_API_KEY and APPLE_API_KEY_BASE64 secrets are required for notarized macOS releases.\n' >&2
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/apple-notary"
+          key_path="$RUNNER_TEMP/apple-notary/AuthKey_${APPLE_API_KEY}.p8"
+          printf '%s' "$APPLE_API_KEY_BASE64" | base64 -D > "$key_path"
+          chmod 600 "$key_path"
+          printf 'APPLE_API_KEY_PATH=%s\n' "$key_path" >> "$GITHUB_ENV"
       - name: Build installer
         uses: tauri-apps/tauri-action@action-v1.0.0
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         with:
           tauriScript: cargo tauri
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} -- --locked

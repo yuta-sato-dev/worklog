@@ -12,7 +12,7 @@ GitHubの[最新リリース](../../releases/latest)から、自分の環境に�
 | Intel Mac | 名前に `x64` を含む `.dmg` | DMGを開き、WorklogをApplicationsへ移動 |
 | Windows 10/11（64-bit） | `x64-setup.exe` | EXEを実行し、スタートメニューからWorklogを起動 |
 
-この段階の配布ファイルにはApple Developer署名・公証とWindowsコード署名を設定していません。初回起動時にOSの確認が表示される場合があります。WindowsでWebView2が入っていない場合は、初回インストール時にインターネット接続が必要です。
+macOS版はApple Developer ID署名とAppleのnotarizationを設定したうえで配布します。もし「Appleは、“Worklog”にMacに損害を与えたり、プライバシーを侵害する可能性のあるマルウェアが含まれていないことを検証できませんでした」と表示される場合、そのDMGは未公証の配布物です。新しいリリースを使うか、一時的にWorklogを右クリックして「開く」を選び、それでも止まる場合は「システム設定 → プライバシーとセキュリティ」でWorklogの起動を許可してください。WindowsでWebView2が入っていない場合は、初回インストール時にインターネット接続が必要です。
 
 macOSでは初回起動時に、インストールしたWorklog自身がアクセシビリティ許可を要求します。「システム設定 → プライバシーとセキュリティ → アクセシビリティ」でWorklogを有効にして、アプリを再起動してください。設定画面の「データと権限」には、許可対象になっている実行ファイルのパスと現在の状態も表示されます。Windowsではこの権限設定は不要です。
 
@@ -120,3 +120,24 @@ PLAYWRIGHT_MODULE=/tmp/worklog-ui-test/node_modules/playwright node scripts/ui-s
 `src/lib.rs` が取得・保存・分類、`src-tauri/src/main.rs` が定期取得とUIのAPI、`ui/` が画面です。`tokens.css` がデザイントークンの原本です。変更時は `cp tokens.css ui/tokens.css` で配布用にも反映してください。
 
 Tauriの構成は[公式ドキュメント](https://v2.tauri.app/develop/)に基づき、静的フロントエンドをバンドルしています。
+
+## 配布署名
+
+GitHub ActionsでmacOSの公証済みDMGを作るには、リポジトリのActions secretsに次を設定してください。
+
+| Secret | 内容 |
+| --- | --- |
+| `APPLE_CERTIFICATE` | Developer ID Application証明書を書き出した `.p12` のbase64 |
+| `APPLE_CERTIFICATE_PASSWORD` | `.p12` の書き出し時に設定したパスワード |
+| `APPLE_SIGNING_IDENTITY` | `Developer ID Application: ...` の署名ID |
+| `APPLE_API_KEY` | App Store Connect API Key ID |
+| `APPLE_API_ISSUER` | App Store Connect Issuer ID |
+| `APPLE_API_KEY_BASE64` | `AuthKey_XXXXXXXXXX.p8` のbase64 |
+
+`APPLE_API_KEY_BASE64` は次のように作成できます。
+
+```sh
+base64 -i AuthKey_XXXXXXXXXX.p8 | tr -d '\n' | pbcopy
+```
+
+macOS向けにDeveloper ID証明書で署名する場合はnotarizationが必要です。未設定のままmacOSリリースを作ろうとすると、CIは失敗して未公証DMGの公開を止めます。
