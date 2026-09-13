@@ -7,7 +7,13 @@ if ! cargo tauri --version >/dev/null 2>&1; then
 fi
 
 case "$(uname -s)" in
-  Darwin) bundles='dmg' ;;
+  Darwin)
+    bundles='dmg'
+    if security find-identity -v -p codesigning | grep -q '"Worklog Local Code Signing"'; then
+      export APPLE_SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:-Worklog Local Code Signing}"
+      echo "macOS署名: $APPLE_SIGNING_IDENTITY"
+    fi
+    ;;
   MINGW*|MSYS*|CYGWIN*) bundles='nsis' ;;
   *)
     echo 'この配布スクリプトはmacOSまたはWindows（Git Bash）で実行してください。' >&2

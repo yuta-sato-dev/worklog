@@ -149,3 +149,5 @@ base64 -i AuthKey_XXXXXXXXXX.p8 | tr -d '\n' | pbcopy
 ```
 
 macOS向けにDeveloper ID証明書で署名する場合はnotarizationが必要です。未設定のままmacOSリリースを作ろうとすると、CIは失敗して未公証DMGの公開を止めます。
+
+開発中にこのMacだけでアクセシビリティ許可を安定させたい場合は、ログインキーチェーンに `Worklog Local Code Signing` というコード署名IDを作成して使えます。`scripts/build-app.sh` はこの署名IDが存在する場合、macOSビルド時に自動で `APPLE_SIGNING_IDENTITY=Worklog Local Code Signing` を使います。これは他のMacへ配布するための署名ではありません。
