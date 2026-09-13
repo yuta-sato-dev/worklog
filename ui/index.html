@@ -6,6 +6,7 @@
   <a class="wordmark" href="#dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 5v14h12M6 5h12M6 12h9"/></svg>Worklog</a>
   <nav class="primary-nav" aria-label="メイン">
     <a href="#dashboard" data-page="dashboard" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></svg>ダッシュボード</a>
+    <a href="#report" data-page="report"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19V5M5 19h14M9 16v-5M13 16V8M17 16v-3"/></svg>レポート</a>
     <a href="#settings" data-page="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg>設定</a>
   </nav>
   <div class="sidebar-bottom"><span class="local-dot" aria-hidden="true"></span>この端末に保存</div>
@@ -13,8 +14,8 @@
 <main class="main-shell">
   <header class="topbar"><h1 id="page-title">ダッシュボード</h1><div class="record-controls"><span id="status" role="status">接続中</span><button id="pause" class="quiet-button" disabled>一時停止</button></div></header>
   <div id="error" role="alert" hidden></div>
+  <div id="shared-day-toolbar" class="day-toolbar"><div class="date-controls"><button id="previous-day" class="icon-button" aria-label="前の日">‹</button><label class="sr-only" for="date">表示する日付</label><input id="date" type="date" required><button id="next-day" class="icon-button" aria-label="次の日">›</button><button id="today" class="quiet-button">今日</button></div><button id="export" class="primary" disabled>稼働メモを作る</button></div>
   <div id="dashboard-page" class="page">
-    <div class="day-toolbar"><div class="date-controls"><button id="previous-day" class="icon-button" aria-label="前の日">‹</button><label class="sr-only" for="date">表示する日付</label><input id="date" type="date" required><button id="next-day" class="icon-button" aria-label="次の日">›</button><button id="today" class="quiet-button">今日</button></div><button id="export" class="primary" disabled>稼働メモを作る</button></div>
     <div class="metrics" aria-label="選択日の集計">
       <div><span>作業の記録</span><strong id="count">—</strong><small>サンプル</small></div>
       <div><span>プロジェクト</span><strong id="project-count">—</strong><small>未分類を除く</small></div>
@@ -26,15 +27,29 @@
         <div class="panel-heading"><h2 id="activity-title">タイムライン</h2><button id="refresh" class="quiet-button">更新</button></div>
         <div class="filter-bar"><label class="sr-only" for="search">記録を検索</label><input id="search" type="search" placeholder="タイトル・アプリを検索"><label class="sr-only" for="app-filter">アプリで絞り込む</label><select id="app-filter"><option value="">すべてのアプリ</option></select></div>
         <div id="active-filter" hidden><span id="filter-label"></span><button id="clear-filter" class="quiet-button">解除</button></div>
-        <div class="activity-columns" aria-hidden="true"><span>時刻</span><span>作業 / アプリ</span><span>プロジェクト</span><span></span></div>
+        <div class="activity-columns" aria-hidden="true"><span>時間</span><span>作業 / アプリ</span><span>プロジェクト</span><span></span></div>
         <div id="entries" aria-live="polite"><p class="empty">記録を読み込んでいます…</p></div>
         <div class="list-footer"><span id="result-count" class="muted"></span><div class="pager"><button id="previous-page" class="icon-button" aria-label="前のページ" disabled>‹</button><span id="page-number">1 / 1</span><button id="next-page" class="icon-button" aria-label="次のページ" disabled>›</button></div></div>
       </section>
       <aside class="dashboard-aside">
         <section class="panel" aria-labelledby="projects-heading"><div class="panel-heading"><h2 id="projects-heading">プロジェクト</h2></div><div id="project-list"></div></section>
-        <section class="record-info" aria-label="記録状況"><p id="last">まだ記録がありません</p><p id="next-capture" class="muted"></p><p class="muted">記録は作業を思い出すための手がかりです。実働時間は稼働メモで補ってください。</p></section>
+        <section class="record-info" aria-label="記録状況"><p id="last">まだ記録がありません</p><p id="next-capture" class="muted"></p><p class="muted">時間は記録間隔からの推定です。実際の作業内容は稼働メモで補えます。</p></section>
       </aside>
     </div>
+  </div>
+  <div id="report-page" class="page report-page" hidden>
+    <section class="panel report-summary" aria-labelledby="report-title">
+      <div class="panel-heading"><h2 id="report-title">日次レポート</h2></div>
+      <div class="report-metrics">
+        <div><span>作業時間</span><strong id="report-work">—</strong><small>推定</small></div>
+        <div><span>離席時間</span><strong id="report-idle">—</strong><small>推定</small></div>
+      </div>
+    </section>
+    <section class="panel report-panel" aria-labelledby="report-projects-title">
+      <div class="panel-heading"><h2 id="report-projects-title">プロジェクト別</h2></div>
+      <div id="report-projects"></div>
+      <p class="report-note">記録間隔から推定した時間です。記録と記録の間の作業は含まれません。</p>
+    </section>
   </div>
   <div id="settings-page" class="page settings-page" hidden>
     <form id="settings-form">
@@ -64,5 +79,5 @@ add-zsh-hook precmd _worklog_title</pre><p>ターミナルやテーマがタイ�
   </div>
 </main>
 <dialog id="classify"><form id="rule-form"><h2>プロジェクトに分類</h2><p class="muted">この条件に一致する過去と今後の記録に適用します。</p><label>アプリ名<input name="app" required readonly></label><label>タイトルに含まれる文字列<input name="contains" required maxlength="500"></label><label>プロジェクト名<input name="project" required maxlength="120" placeholder="例：サイトのリニューアル"></label><p id="rule-error" role="alert"></p><div class="actions"><button type="button" id="cancel-rule">キャンセル</button><button type="submit" class="primary">ルールを保存</button></div></form></dialog>
-<dialog id="memo"><h2>稼働メモ</h2><p class="note">選択日の全記録です。実際の作業内容や時間を補って使えます。</p><label class="sr-only" for="memo-text">稼働メモの内容</label><textarea id="memo-text" rows="15"></textarea><p id="copy-status" role="status"></p><div class="actions"><button id="close-memo">閉じる</button><button id="copy" class="primary">コピー</button></div></dialog>
+<dialog id="memo"><h2>稼働メモ</h2><p class="note">選択日のまとまりです。推定時間を確認しながら実際の作業内容を補って使えます。</p><label class="sr-only" for="memo-text">稼働メモの内容</label><textarea id="memo-text" rows="15"></textarea><p id="copy-status" role="status"></p><div class="actions"><button id="close-memo">閉じる</button><button id="copy" class="primary">コピー</button></div></dialog>
 </body></html>

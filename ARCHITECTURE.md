@@ -9,6 +9,7 @@ flowchart LR
     OS["macOS / Windows<br/>アクティブウィンドウ・アイドル時間"]
     Capture["Capture Core<br/>アプリ名・タイトル取得"]
     Classify["プロジェクト判定<br/>タイトル解析・分類ルール"]
+    Summary["まとめ処理<br/>ブロック化・日次レポート"]
     DB[("SQLite<br/>ローカル保存")]
     Tauri["Tauri<br/>定期実行・トレイ・IPC"]
     UI["Dashboard<br/>HTML / CSS / JavaScript"]
@@ -20,6 +21,7 @@ flowchart LR
     Classify --> DB
     Tauri --> Capture
     DB <--> Tauri
+    Tauri --> Summary
     Tauri <-->|invoke| UI
     Actions --> Tauri
     Actions --> Release
@@ -58,7 +60,14 @@ sequenceDiagram
     Scheduler->>Store: 当日の記録を問い合わせ
     Store-->>Scheduler: Sample一覧
     Scheduler->>Scheduler: 現在の分類ルールを適用
-    Scheduler-->>UI: タイムライン用データ
+    Scheduler-->>UI: 件数・プロジェクト一覧用データ
+
+    UI->>Scheduler: invoke("day_summary")
+    Scheduler->>Store: 当日の記録を問い合わせ
+    Store-->>Scheduler: Sample一覧
+    Scheduler->>Scheduler: 分類ルールを適用し、連続記録をBlockへまとめる
+    Scheduler->>Scheduler: BlockからDayReportを集計
+    Scheduler-->>UI: タイムライン・レポート用データ
 ```
 
 1件の作業記録は、概ね次の情報を持ちます。
@@ -67,12 +76,15 @@ sequenceDiagram
 Sample
 ├── id
 ├── timestamp（UTC）
+├── interval_minutes（その記録時点の記録間隔）
 ├── app（アプリ名）
 ├── title（最前面ウィンドウのタイトル）
 ├── project（推定したプロジェクト名）
 ├── source（情報の取得元）
 └── status（active / idle）
 ```
+
+`day_summary` は当日の `Sample` を古い順に読み出し、アプリ名・タイトル・状態が同じ隣接記録を `Block` にまとめます。前回記録の間隔の1.5倍を超えて空いた場合は、スリープや一時停止などの途切れとして別ブロックにします。`DayReport` はブロックをプロジェクト別に集計し、離席ブロックは作業時間とは分けて返します。
 
 ブラウザでは選択中タブのタイトルを取得します。すべてのタブ、ページ本文、URL、キー入力、ChatGPTの会話本文、スクリーンショットは記録しません。
 
@@ -155,6 +167,7 @@ stateDiagram-v2
 主な操作は次のとおりです。
 
 - 当日の記録取得
+- 当日のまとまりと日次レポート取得
 - 状態と次回記録時刻の取得
 - 一時停止・再開
 - 設定の取得・保存
@@ -162,7 +175,7 @@ stateDiagram-v2
 - 分類ルールの追加・削除
 - アプリ終了
 
-ダッシュボード側では、取得した記録をタイムライン表示し、プロジェクト単位に集計します。
+ダッシュボード側では、`day_summary` のブロックを新しい順にタイムライン表示し、レポート画面では同じ日付の推定時間をプロジェクト単位に表示します。件数やサイドバーのプロジェクト一覧には、引き続き `day` の記録単位データを使います。
 
 ## ビルドと配布
 

@@ -1,7 +1,7 @@
 const $ = id => document.getElementById(id);
 const invoke = window.__TAURI__?.core?.invoke;
 const PAGE_SIZE = 12;
-let samples = [], rules = [], paused = false, pageIndex = 0, selectedProject = '', generation = 0, settingsDirty = false;
+let samples = [], blocks = [], blocksOldestFirst = [], report = { work_seconds: 0, idle_seconds: 0, projects: [] }, rules = [], paused = false, pageIndex = 0, selectedProject = '', generation = 0, settingsDirty = false;
 let settings = { interval_minutes: 5, idle_minutes: 5, excluded_apps: [] };
 const localDate = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const time = v => new Date(v).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
@@ -14,12 +14,18 @@ function emptyState(message){
   icon.setAttribute('viewBox','0 0 24 24'); const path=document.createElementNS(icon.namespaceURI,'path');
   path.setAttribute('d','M5 6h14v13H5zM8 3v6m8-6v6M8 13h8'); icon.append(path); wrap.append(icon,el('p',message)); return wrap;
 }
+function formatDuration(seconds){
+  const minutes=Math.max(0,Math.round(seconds/60));
+  const hours=Math.floor(minutes/60), rest=minutes%60;
+  return hours?`${hours}h ${String(rest).padStart(2,'0')}m`:`${minutes}m`;
+}
+function timeRange(block){return `${time(block.start)}〜${time(block.end)}`;}
 function filteredRows(){
   const query=$('search').value.trim().toLocaleLowerCase(), app=$('app-filter').value;
-  return samples.filter(s=>(!app||s.app===app)&&(!selectedProject||(s.project||'未分類')===selectedProject)&&`${s.app} ${s.title} ${s.project||''}`.toLocaleLowerCase().includes(query));
+  return blocks.filter(b=>(!app||b.app===app)&&(!selectedProject||(b.project||'未分類')===selectedProject)&&`${b.app} ${b.title} ${b.project||''}`.toLocaleLowerCase().includes(query));
 }
 function renderAppFilter(){
-  const current=$('app-filter').value, names=[...new Set(samples.filter(s=>s.app).map(s=>s.app))].sort((a,b)=>a.localeCompare(b,'ja'));
+  const current=$('app-filter').value, names=[...new Set(blocks.filter(b=>b.app).map(b=>b.app))].sort((a,b)=>a.localeCompare(b,'ja'));
   $('app-filter').replaceChildren(new Option('すべてのアプリ',''),...names.map(n=>new Option(n,n))); if(names.includes(current))$('app-filter').value=current;
 }
 function renderProjects(work){
@@ -33,28 +39,54 @@ function renderProjects(work){
   });
   $('project-list').replaceChildren(...nodes); if(!nodes.length)$('project-list').append(el('p','この日のプロジェクトはまだありません。'));
 }
-function sampleTitle(s){
-  if(s.status==='idle')return '離席・操作なし';
-  if(s.status==='permission_required')return 'アクセシビリティ権限が必要です';
-  return s.title||'タイトルを取得できません';
+function blockTitle(b){
+  if(b.status==='idle')return '離席・操作なし';
+  if(b.status==='permission_required')return 'アクセシビリティ権限が必要です';
+  return b.title||'タイトルを取得できません';
 }
-function activityRow(s){
-  const row=el('article','','activity-row'), clock=el('time',time(s.timestamp)); clock.dateTime=s.timestamp;
-  const idle=s.status==='idle', detail=el('div'); detail.append(el('span',sampleTitle(s),'title-text'),el('span',s.app||`${settings.idle_minutes}分以上操作なし`,'app-name'));
-  const project=el('div','','project-cell'); project.append(el('span',idle?'—':s.project||'未分類','project-name'));
-  if(!idle)project.append(el('span',s.source==='rule'?'分類ルール':s.project?'タイトルから推定':'プロジェクト不明','source-name'));
+function activityRow(b){
+  const row=el('article','','activity-row'), clock=el('time',''); clock.dateTime=b.start;
+  clock.append(el('span',timeRange(b),'time-range'),el('span',formatDuration(b.seconds),'duration-text'));
+  const idle=b.status==='idle', detail=el('div'); detail.append(el('span',blockTitle(b),'title-text'),el('span',b.app||`${settings.idle_minutes}分以上操作なし`,'app-name'));
+  const project=el('div','','project-cell'); project.append(el('span',idle?'—':b.project||'未分類','project-name'));
+  if(!idle)project.append(el('span',b.source==='rule'?'分類ルール':b.project?'タイトルから推定':'プロジェクト不明','source-name'));
   row.append(clock,detail,project);
-  if(idle)row.append(document.createElement('span')); else { const b=el('button','分類','classify-button quiet-button'); b.type='button'; b.setAttribute('aria-label',`${time(s.timestamp)}の記録を分類`); b.onclick=()=>classify(s); row.append(b); }
+  if(idle)row.append(document.createElement('span')); else { const button=el('button','分類','classify-button quiet-button'); button.type='button'; button.setAttribute('aria-label',`${timeRange(b)}の記録を分類`); button.onclick=()=>classify(b); row.append(button); }
   return row;
+}
+function renderReport(){
+  $('report-work').textContent=formatDuration(report.work_seconds);
+  $('report-idle').textContent=formatDuration(report.idle_seconds);
+  const max=Math.max(...report.projects.map(p=>p.seconds),1);
+  const total=Math.max(report.work_seconds,1);
+  const closed=new Set([...$('report-projects').querySelectorAll('details:not([open])')].map(d=>d.dataset.project));
+  const nodes=report.projects.map(project=>{
+    const name=project.project||'未分類';
+    const item=el('details','','report-project'); item.dataset.project=name; item.open=!closed.has(name);
+    const summary=el('summary','');
+    const cap=el('span','','project-caption');
+    cap.append(el('span',name),el('span',formatDuration(project.seconds)));
+    const bar=document.createElement('progress'); bar.max=max; bar.value=project.seconds;
+    summary.append(cap,bar,el('small',`${Math.round(project.seconds/total*100)}%`));
+    const entries=el('div','','report-entries');
+    for(const entry of project.entries){
+      const row=el('div','','report-entry');
+      row.append(el('span',`${entry.app} — ${entry.title||'タイトルを取得できません'}`),el('span',formatDuration(entry.seconds)));
+      entries.append(row);
+    }
+    item.append(summary,entries);
+    return item;
+  });
+  $('report-projects').replaceChildren(...nodes); if(!nodes.length)$('report-projects').append(el('p','この日の作業時間はまだありません。','muted'));
 }
 function render(){
   const work=samples.filter(s=>s.status!=='idle');
   $('count').textContent=work.length; $('project-count').textContent=new Set(work.map(s=>s.project).filter(Boolean)).size; $('app-count').textContent=new Set(work.map(s=>s.app).filter(Boolean)).size; $('interval-display').textContent=settings.interval_minutes;
-  renderProjects(work); $('active-filter').hidden=!selectedProject; $('filter-label').textContent=selectedProject?`プロジェクト：${selectedProject}`:'';
+  renderProjects(work); renderReport(); $('active-filter').hidden=!selectedProject; $('filter-label').textContent=selectedProject?`プロジェクト：${selectedProject}`:'';
   const filtered=filteredRows(), pageCount=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE)); pageIndex=Math.min(pageIndex,pageCount-1);
   const visible=filtered.slice(pageIndex*PAGE_SIZE,(pageIndex+1)*PAGE_SIZE); $('entries').replaceChildren(...visible.map(activityRow));
   if(!visible.length)$('entries').append(emptyState($('search').value||$('app-filter').value||selectedProject?'条件に一致する記録がありません。':'この日の記録はまだありません。'));
-  $('result-count').textContent=`${filtered.length}件`; $('page-number').textContent=`${pageIndex+1} / ${pageCount}`; $('previous-page').disabled=pageIndex===0; $('next-page').disabled=pageIndex>=pageCount-1; $('export').disabled=!samples.length;
+  $('result-count').textContent=`${filtered.length}件`; $('page-number').textContent=`${pageIndex+1} / ${pageCount}`; $('previous-page').disabled=pageIndex===0; $('next-page').disabled=pageIndex>=pageCount-1; $('export').disabled=!blocksOldestFirst.length;
 }
 function renderRules(){
   $('rule-count').textContent=`${rules.length}件`;
@@ -73,7 +105,7 @@ function updateStatus(state){
 async function refresh(){
   if(!invoke){$('status').dataset.state='disconnected';$('status').textContent='未接続';showError('Worklogアプリから開いてください。ブラウザ単体では記録に接続できません。');$('entries').replaceChildren(emptyState('Worklogアプリの起動を待っています。'));return;}
   const current=++generation;
-  try{const [rows,state,currentRules,currentSettings]=await Promise.all([invoke('day',{date:$('date').value}),invoke('status'),invoke('rules'),invoke('get_settings')]);if(current!==generation)return;samples=rows;rules=currentRules;settings=currentSettings;updateStatus(state);fillSettings();renderAppFilter();render();renderRules();}
+  try{const [rows,summary,state,currentRules,currentSettings]=await Promise.all([invoke('day',{date:$('date').value}),invoke('day_summary',{date:$('date').value}),invoke('status'),invoke('rules'),invoke('get_settings')]);if(current!==generation)return;samples=rows;blocksOldestFirst=summary.blocks;blocks=[...summary.blocks].reverse();report=summary.report;rules=currentRules;settings=currentSettings;updateStatus(state);fillSettings();renderAppFilter();render();renderRules();}
   catch(e){if(current===generation){showError(e);$('status').dataset.state='error';$('status').textContent='接続エラー';}}
 }
 async function loadAutostart(){
@@ -97,11 +129,11 @@ async function loadAccessibility(){
   }
 }
 function switchPage(){
-  const page=location.hash==='#settings'?'settings':'dashboard';$('dashboard-page').hidden=page!=='dashboard';$('settings-page').hidden=page!=='settings';$('page-title').textContent=page==='dashboard'?'ダッシュボード':'設定';
+  const page=location.hash==='#settings'?'settings':location.hash==='#report'?'report':'dashboard';$('dashboard-page').hidden=page!=='dashboard';$('report-page').hidden=page!=='report';$('settings-page').hidden=page!=='settings';$('shared-day-toolbar').hidden=page==='settings';$('page-title').textContent=page==='dashboard'?'ダッシュボード':page==='report'?'レポート':'設定';
   document.querySelectorAll('[data-page]').forEach(a=>a.dataset.page===page?a.setAttribute('aria-current','page'):a.removeAttribute('aria-current'));if(page==='settings'){loadAutostart();loadAccessibility();}
 }
 function moveDate(days){const d=new Date(`${$('date').value}T12:00:00`);d.setDate(d.getDate()+days);$('date').value=localDate(d);selectedProject='';pageIndex=0;refresh();}
-function classify(s){const f=$('rule-form');f.elements.app.value=s.app;f.elements.contains.value=s.title;f.elements.project.value=s.project||'';$('rule-error').textContent='';$('classify').showModal();}
+function classify(block){const f=$('rule-form');f.elements.app.value=block.app;f.elements.contains.value=block.title;f.elements.project.value=block.project||'';$('rule-error').textContent='';$('classify').showModal();}
 
 $('rule-form').onsubmit=async e=>{e.preventDefault();e.submitter.disabled=true;try{await invoke('add_rule',Object.fromEntries(new FormData(e.currentTarget)));$('classify').close();await refresh();}catch(x){$('rule-error').textContent=String(x);}finally{e.submitter.disabled=false;}};
 $('cancel-rule').onclick=()=>$('classify').close(); $('classify').onclick=e=>{if(e.target===$('classify'))$('classify').close();}; $('memo').onclick=e=>{if(e.target===$('memo'))$('memo').close();};
@@ -112,6 +144,6 @@ $('settings-form').oninput=()=>{settingsDirty=true;$('settings-message').textCon
 $('settings-form').onsubmit=async e=>{e.preventDefault();const b=$('save-settings');b.disabled=true;$('settings-message').textContent='保存中…';$('settings-message').dataset.error='false';const next={interval_minutes:Number($('interval').value),idle_minutes:Number($('idle').value),excluded_apps:$('excluded').value.split('\n').map(v=>v.trim()).filter(Boolean)};try{settings=await invoke('save_settings',{settings:next});settingsDirty=false;fillSettings();$('settings-message').textContent='保存しました。';await refresh();}catch(x){$('settings-message').textContent=String(x);$('settings-message').dataset.error='true';}finally{b.disabled=false;}};
 $('autostart').onchange=async()=>{const enabled=$('autostart').checked;$('autostart').disabled=true;$('autostart-message').textContent='変更中…';$('autostart-message').dataset.error='false';try{await invoke('set_autostart',{enabled});$('autostart-message').textContent=enabled?'次回のログインから自動で起動します。':'自動起動を解除しました。';}catch(e){$('autostart').checked=!enabled;$('autostart-message').textContent=String(e);$('autostart-message').dataset.error='true';}finally{$('autostart').disabled=false;}};
 $('request-accessibility').onclick=async()=>{$('request-accessibility').disabled=true;try{await invoke('request_accessibility_permission');$('accessibility-message').textContent='システム設定でWorklogを有効にし、アプリを再起動してください。';setTimeout(loadAccessibility,1500);}catch(e){$('accessibility-message').textContent=String(e);$('request-accessibility').disabled=false;}};
-$('export').onclick=()=>{$('memo-text').value=`${$('date').value} 稼働メモ\n※定期的な観測記録です。実働時間は別途確認。\n\n${samples.map(s=>`${time(s.timestamp)}  ${s.status==='idle'?'離席・操作なし':`[${s.project||'未分類'}] ${s.app} — ${sampleTitle(s)}`}`).join('\n')}`;$('copy-status').textContent='';$('memo').showModal();};
+$('export').onclick=()=>{$('memo-text').value=`${$('date').value} 稼働メモ\n※記録間隔から推定した時間です。記録と記録の間の作業は含まれません。\n\n${blocksOldestFirst.map(b=>`${timeRange(b)} (${formatDuration(b.seconds)})  ${b.status==='idle'?'離席・操作なし':`[${b.project||'未分類'}] ${b.app} — ${blockTitle(b)}`}`).join('\n')}`;$('copy-status').textContent='';$('memo').showModal();};
 $('close-memo').onclick=()=>$('memo').close();$('copy').onclick=async()=>{try{await navigator.clipboard.writeText($('memo-text').value);$('copy-status').textContent='コピーしました。';}catch{$('memo-text').select();$('copy-status').textContent='⌘C または Ctrl+C でコピーしてください。';}};
 $('quit').onclick=async()=>{$('quit').disabled=true;await invoke('quit_app');};window.addEventListener('hashchange',switchPage);switchPage();refresh();setInterval(()=>{if(!$('classify').open&&!$('memo').open&&!settingsDirty)refresh();},15000);

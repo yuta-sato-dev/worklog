@@ -1,5 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-use fetch_focused_window::{Rule, Sample, Settings, Store};
+use fetch_focused_window::{Block, DayReport, Rule, Sample, Settings, Store};
 use std::{
     sync::Mutex,
     time::{Duration, Instant},
@@ -28,9 +28,24 @@ struct AccessibilityStatus {
     trusted: bool,
     executable: String,
 }
+#[derive(serde::Serialize)]
+struct DaySummary {
+    blocks: Vec<Block>,
+    report: DayReport,
+}
 #[tauri::command]
 fn day(date: String, state: tauri::State<AppState>) -> Result<Vec<Sample>, String> {
     state.0.lock().map_err(|e| e.to_string())?.store.day(&date)
+}
+#[tauri::command]
+fn day_summary(date: String, state: tauri::State<AppState>) -> Result<DaySummary, String> {
+    let recorder = state.0.lock().map_err(|e| e.to_string())?;
+    let samples = recorder.store.day(&date)?;
+    let interval_minutes = recorder.store.settings()?.interval_minutes;
+    let blocks =
+        fetch_focused_window::group_samples(&samples, interval_minutes, chrono::Utc::now());
+    let report = fetch_focused_window::day_report(&blocks);
+    Ok(DaySummary { blocks, report })
 }
 #[tauri::command]
 fn status(app: tauri::AppHandle, state: tauri::State<AppState>) -> Result<Status, String> {
@@ -271,7 +286,7 @@ fn main() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![day, status, set_paused, rules, add_rule, delete_rule, get_settings, save_settings, get_autostart, set_autostart, accessibility_status, request_accessibility_permission, quit_app])
+        .invoke_handler(tauri::generate_handler![day, day_summary, status, set_paused, rules, add_rule, delete_rule, get_settings, save_settings, get_autostart, set_autostart, accessibility_status, request_accessibility_permission, quit_app])
         .run(tauri::generate_context!())
         .expect("Worklogを起動できませんでした");
 }
