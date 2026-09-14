@@ -187,7 +187,7 @@ stateDiagram-v2
 
 ## ビルドと配布
 
-ルート [`Cargo.toml`](Cargo.toml) は仮想workspaceです。`crates/worklog-core` と `src-tauri` がルートの `Cargo.lock`・`target/` を共有し、versionとeditionを `workspace.package` から継承します。TauriもCargoのバージョンを使い、リリース時はその値とタグ `v{version}` の一致を確認します。`default-members` はコアのみです。検証コマンドは[READMEの開発・検証](README.md#開発検証)を参照してください。ローカルのインストーラー出力先は `target/release/bundle/`、CIで `--target` を指定した場合は `target/<target>/release/bundle/` です。
+ルート [`Cargo.toml`](Cargo.toml) は仮想workspaceです。`crates/worklog-core` と `src-tauri` がルートの `Cargo.lock`・`target/` を共有し、versionとeditionを `workspace.package` から継承します。TauriもCargoのバージョンを使い、リリース時はその値とタグ `v{version}` の一致を確認します。`default-members` はコアのみです。検証コマンドは[開発ガイドの検証](docs/development.md#検証)を参照してください。ローカルのインストーラー出力先は `target/release/bundle/`、CIで `--target` を指定した場合は `target/<target>/release/bundle/` です。
 
 ```mermaid
 flowchart LR
