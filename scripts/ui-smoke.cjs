@@ -15,20 +15,20 @@ fs.mkdirSync(screenshotDir, { recursive: true });
  await page.addInitScript(()=>{
   let paused=false,rules=[],nextRuleId=1,autostart=false,settings={interval_minutes:5,idle_minutes:5,excluded_apps:[]}; window.calls=[];
   const rows=[
-   {timestamp:'2026-09-13T08:55:00+09:00',interval_minutes:5,app:'システム設定',title:'',project:null,status:'title_unavailable',source:'none'},
-   {timestamp:'2026-09-13T09:00:00+09:00',interval_minutes:5,app:'Code',title:'main.rs — worklog — Visual Studio Code',project:'worklog',status:'active',source:'title'},
-   {timestamp:'2026-09-13T09:05:00+09:00',interval_minutes:5,app:'Code',title:'main.rs — worklog — Visual Studio Code',project:'worklog',status:'active',source:'title'},
-   {timestamp:'2026-09-13T09:30:00+09:00',interval_minutes:5,app:'Firefox',title:'<img src=x onerror="window.INJECTED=1"> ChatGPT — 設計の相談',project:null,status:'active',source:'title'},
+   {timestamp:'2026-09-13T08:55:00+09:00',interval_minutes:5,app:'システム設定',title:'',project:null,status:'title_unavailable',source:'window_title'},
+   {timestamp:'2026-09-13T09:00:00+09:00',interval_minutes:5,app:'Code',title:'main.rs — worklog — Visual Studio Code',project:'worklog',status:'captured',source:'window_title'},
+   {timestamp:'2026-09-13T09:05:00+09:00',interval_minutes:5,app:'Code',title:'main.rs — worklog — Visual Studio Code',project:'worklog',status:'captured',source:'window_title'},
+   {timestamp:'2026-09-13T09:30:00+09:00',interval_minutes:5,app:'Firefox',title:'<img src=x onerror="window.INJECTED=1"> ChatGPT — 設計の相談',project:null,status:'captured',source:'window_title'},
    {timestamp:'2026-09-13T09:35:00+09:00',interval_minutes:5,app:'',title:'',project:null,status:'idle',source:'idle'},
-   {timestamp:'2026-09-13T09:40:00+09:00',interval_minutes:5,app:'Terminal',title:'Worklog — プロジェクトの作業',project:'Project'+ 'VeryLongName'.repeat(15),status:'active',source:'title'}
+   {timestamp:'2026-09-13T09:40:00+09:00',interval_minutes:5,app:'Terminal',title:'Worklog — プロジェクトの作業',project:'Project'+ 'VeryLongName'.repeat(15),status:'captured',source:'window_title'}
   ];
   const summary={
    blocks:[
-    {start:'2026-09-13T08:55:00+09:00',end:'2026-09-13T09:00:00+09:00',seconds:300,app:'システム設定',title:'',project:null,status:'title_unavailable',source:'none',sample_count:1},
-    {start:'2026-09-13T09:00:00+09:00',end:'2026-09-13T09:30:00+09:00',seconds:1800,app:'Code',title:'main.rs — worklog — Visual Studio Code',project:'worklog',status:'active',source:'title',sample_count:2},
-    {start:'2026-09-13T09:30:00+09:00',end:'2026-09-13T09:35:00+09:00',seconds:300,app:'Firefox',title:'<img src=x onerror="window.INJECTED=1"> ChatGPT — 設計の相談',project:null,status:'active',source:'title',sample_count:1},
+    {start:'2026-09-13T08:55:00+09:00',end:'2026-09-13T09:00:00+09:00',seconds:300,app:'システム設定',title:'',project:null,status:'title_unavailable',source:'window_title',sample_count:1},
+    {start:'2026-09-13T09:00:00+09:00',end:'2026-09-13T09:30:00+09:00',seconds:1800,app:'Code',title:'main.rs — worklog — Visual Studio Code',project:'worklog',status:'captured',source:'window_title',sample_count:2},
+    {start:'2026-09-13T09:30:00+09:00',end:'2026-09-13T09:35:00+09:00',seconds:300,app:'Firefox',title:'<img src=x onerror="window.INJECTED=1"> ChatGPT — 設計の相談',project:null,status:'captured',source:'window_title',sample_count:1},
     {start:'2026-09-13T09:35:00+09:00',end:'2026-09-13T09:40:00+09:00',seconds:300,app:'',title:'',project:null,status:'idle',source:'idle',sample_count:1},
-    {start:'2026-09-13T09:40:00+09:00',end:'2026-09-13T09:45:00+09:00',seconds:300,app:'Terminal',title:'Worklog — プロジェクトの作業',project:'Project'+ 'VeryLongName'.repeat(15),status:'active',source:'title',sample_count:1}
+    {start:'2026-09-13T09:40:00+09:00',end:'2026-09-13T09:45:00+09:00',seconds:300,app:'Terminal',title:'Worklog — プロジェクトの作業',project:'Project'+ 'VeryLongName'.repeat(15),status:'captured',source:'window_title',sample_count:1}
    ],
    report:{work_seconds:2700,idle_seconds:300,projects:[
     {project:'worklog',seconds:1800,entries:[{app:'Code',title:'main.rs — worklog — Visual Studio Code',seconds:1800}]},
@@ -39,7 +39,7 @@ fs.mkdirSync(screenshotDir, { recursive: true });
   const baseBlocks=summary.blocks.map(block=>({...block}));
   const ruleMatches=(sample,rule)=>sample.status!=='idle'&&sample.app===rule.app&&String(sample.title||'').includes(rule.contains);
   const applyRules=()=>{summary.blocks=baseBlocks.map(block=>{const next={...block},rule=rules.find(r=>ruleMatches(next,r));if(rule){next.project=rule.project;next.source='rule';}return next;});};
-  window.__TAURI__={core:{invoke:async(cmd,args)=>{window.calls.push({cmd,args}); if(cmd==='day')return rows;if(cmd==='day_summary')return summary;if(cmd==='status')return{paused,last_capture:'2026-09-13T09:40:00+09:00',next_capture:'2026-09-13T09:45:00+09:00',last_error:null,database:'/Users/example/Library/Application Support/jp.worklog/worklog.sqlite'};if(cmd==='rules')return rules;if(cmd==='get_settings')return settings;if(cmd==='save_settings'){settings=args.settings;return settings;}if(cmd==='get_autostart')return autostart;if(cmd==='set_autostart'){autostart=args.enabled;return;}if(cmd==='accessibility_status'||cmd==='request_accessibility_permission')return{supported:true,trusted:false,executable:'/Applications/Worklog.app/Contents/MacOS/worklog'};if(cmd==='quit_app')return;if(cmd==='set_paused'){paused=args.paused;return;}if(cmd==='add_rule'){rules.unshift({id:nextRuleId++,...args});applyRules();return;}if(cmd==='delete_rule'){rules=rules.filter(rule=>rule.id!==args.id);applyRules();return;}throw Error(cmd);}}};
+  window.__TAURI__={core:{invoke:async(cmd,args)=>{window.calls.push({cmd,args}); if(cmd==='day')return rows;if(cmd==='day_summary')return summary;if(cmd==='status')return{paused,last_capture:'2026-09-13T09:40:00+09:00',next_capture:'2026-09-13T09:45:00+09:00',last_error:null,database:'/Users/example/Library/Application Support/jp.local.worklog/worklog.sqlite3'};if(cmd==='rules')return rules;if(cmd==='get_settings')return settings;if(cmd==='save_settings'){settings=args.settings;return settings;}if(cmd==='get_autostart')return autostart;if(cmd==='set_autostart'){autostart=args.enabled;return;}if(cmd==='accessibility_status'||cmd==='request_accessibility_permission')return{supported:true,trusted:false,executable:'/Applications/Worklog.app/Contents/MacOS/worklog'};if(cmd==='quit_app')return;if(cmd==='set_paused'){paused=args.paused;return;}if(cmd==='add_rule'){rules.unshift({id:nextRuleId++,...args});applyRules();return;}if(cmd==='delete_rule'){rules=rules.filter(rule=>rule.id!==args.id);applyRules();return;}throw Error(cmd);}}};
  });
  await page.goto('http://worklog.test/index.html');
  await page.waitForFunction(()=>document.querySelector('#work-time').textContent==='45m'&&document.querySelector('#unclassified-time').textContent==='10m');
@@ -130,7 +130,6 @@ fs.mkdirSync(screenshotDir, { recursive: true });
  assert.equal(await page.evaluate(()=>window.calls.some(c=>c.cmd==='save_settings'&&c.args.settings.interval_minutes===10)),true);
  await page.locator('#autostart').check();await page.waitForFunction(()=>document.querySelector('#autostart-message').textContent.includes('自動で起動'));
  await page.locator('[data-page=dashboard]').click();await page.waitForFunction(()=>!document.querySelector('#dashboard-page').hidden);
- await page.locator('#export').click();const memo=await page.locator('#memo-text').inputValue();assert.match(memo,/ChatGPT/);assert.match(memo,/離席・操作なし/);assert.ok(memo.indexOf('Code')<memo.indexOf('Terminal'));await page.locator('#close-memo').click();
- assert.deepEqual(errors,[]);console.log(JSON.stringify({passed:true,layouts,checks:['unsafe title rendered as text','newest timeline first','duration and range','estimated dashboard metrics','title unavailable cannot classify','report page','search','classification candidates include full title','classification candidate selection','classification custom condition','classification nonmatching warning','classification save','duplicate classification warning','overlap classification warning','classified row layout','timeline rule removal twice','pause/resume','accessibility permission','settings save','autostart','export oldest first','no runtime errors'],screenshots:path.join(screenshotDir, 'worklog-{width}.png')},null,2));
+ assert.deepEqual(errors,[]);console.log(JSON.stringify({passed:true,layouts,checks:['unsafe title rendered as text','newest timeline first','duration and range','estimated dashboard metrics','title unavailable cannot classify','report page','search','classification candidates include full title','classification candidate selection','classification custom condition','classification nonmatching warning','classification save','duplicate classification warning','overlap classification warning','classified row layout','timeline rule removal twice','pause/resume','accessibility permission','settings save','autostart','no runtime errors'],screenshots:path.join(screenshotDir, 'worklog-{width}.png')},null,2));
  } finally { await browser.close(); }
 })().catch(e=>{console.error(e);process.exit(1)});

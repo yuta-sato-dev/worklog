@@ -1,7 +1,7 @@
 const $ = id => document.getElementById(id);
 const invoke = window.__TAURI__?.core?.invoke;
 const PAGE_SIZE = 12;
-let samples = [], blocks = [], blocksOldestFirst = [], report = { work_seconds: 0, idle_seconds: 0, projects: [] }, rules = [], paused = false, pageIndex = 0, selectedProject = '', generation = 0, settingsDirty = false;
+let samples = [], blocks = [], report = { work_seconds: 0, idle_seconds: 0, projects: [] }, rules = [], paused = false, pageIndex = 0, selectedProject = '', generation = 0, settingsDirty = false;
 let settings = { interval_minutes: 5, idle_minutes: 5, excluded_apps: [] };
 const localDate = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const time = v => new Date(v).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
@@ -90,7 +90,7 @@ function render(){
   const filtered=filteredRows(), pageCount=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE)); pageIndex=Math.min(pageIndex,pageCount-1);
   const visible=filtered.slice(pageIndex*PAGE_SIZE,(pageIndex+1)*PAGE_SIZE); $('entries').replaceChildren(...visible.map(activityRow));
   if(!visible.length)$('entries').append(emptyState($('search').value||$('app-filter').value||selectedProject?'条件に一致する記録がありません。':'この日の記録はまだありません。'));
-  $('result-count').textContent=`${filtered.length}件`; $('page-number').textContent=`${pageIndex+1} / ${pageCount}`; $('previous-page').disabled=pageIndex===0; $('next-page').disabled=pageIndex>=pageCount-1; $('export').disabled=!blocksOldestFirst.length;
+  $('result-count').textContent=`${filtered.length}件`; $('page-number').textContent=`${pageIndex+1} / ${pageCount}`; $('previous-page').disabled=pageIndex===0; $('next-page').disabled=pageIndex>=pageCount-1;
 }
 function renderRules(){
   $('rule-count').textContent=`${rules.length}件`;
@@ -109,7 +109,7 @@ function updateStatus(state){
 async function refresh(){
   if(!invoke){$('status').dataset.state='disconnected';$('status').textContent='未接続';showError('Worklogアプリから開いてください。ブラウザ単体では記録に接続できません。');$('entries').replaceChildren(emptyState('Worklogアプリの起動を待っています。'));return;}
   const current=++generation;
-  try{const [rows,summary,state,currentRules,currentSettings]=await Promise.all([invoke('day',{date:$('date').value}),invoke('day_summary',{date:$('date').value}),invoke('status'),invoke('rules'),invoke('get_settings')]);if(current!==generation)return;samples=rows;blocksOldestFirst=summary.blocks;blocks=[...summary.blocks].reverse();report=summary.report;rules=currentRules;settings=currentSettings;updateStatus(state);fillSettings();renderAppFilter();render();renderRules();}
+  try{const [rows,summary,state,currentRules,currentSettings]=await Promise.all([invoke('day',{date:$('date').value}),invoke('day_summary',{date:$('date').value}),invoke('status'),invoke('rules'),invoke('get_settings')]);if(current!==generation)return;samples=rows;blocks=[...summary.blocks].reverse();report=summary.report;rules=currentRules;settings=currentSettings;updateStatus(state);fillSettings();renderAppFilter();render();renderRules();}
   catch(e){if(current===generation){showError(e);$('status').dataset.state='error';$('status').textContent='接続エラー';}}
 }
 async function loadAutostart(){
@@ -238,7 +238,7 @@ function unclassify(rule){
 
 $('rule-form').onsubmit=async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.currentTarget));data.contains=String(data.contains||'').trim();if(!data.contains){$('rule-error').textContent='タイトルに含まれる文字列を入力してください。';return;}e.submitter.disabled=true;try{await invoke('add_rule',data);$('classify').close();await refresh();}catch(x){$('rule-error').textContent=String(x);}finally{e.submitter.disabled=false;}};
 $('unclassify-form').onsubmit=async e=>{e.preventDefault();if(!currentUnclassifyRule)return;e.submitter.disabled=true;try{await invoke('delete_rule',{id:currentUnclassifyRule.id});$('unclassify').close();await refresh();}catch(x){$('unclassify-error').textContent=String(x);}finally{e.submitter.disabled=false;}};
-$('cancel-rule').onclick=()=>$('classify').close(); $('cancel-unclassify').onclick=()=>$('unclassify').close(); $('classify').onclick=e=>{if(e.target===$('classify'))$('classify').close();}; $('unclassify').onclick=e=>{if(e.target===$('unclassify'))$('unclassify').close();}; $('memo').onclick=e=>{if(e.target===$('memo'))$('memo').close();};
+$('cancel-rule').onclick=()=>$('classify').close(); $('cancel-unclassify').onclick=()=>$('unclassify').close(); $('classify').onclick=e=>{if(e.target===$('classify'))$('classify').close();}; $('unclassify').onclick=e=>{if(e.target===$('unclassify'))$('unclassify').close();};
 $('previous-day').onclick=()=>moveDate(-1);$('next-day').onclick=()=>moveDate(1);$('today').onclick=()=>{$('date').value=localDate(new Date());selectedProject='';pageIndex=0;refresh();};
 $('date').onchange=()=>{selectedProject='';pageIndex=0;refresh();};$('refresh').onclick=refresh;$('search').oninput=()=>{pageIndex=0;render();};$('app-filter').onchange=()=>{pageIndex=0;render();};$('clear-filter').onclick=()=>{selectedProject='';pageIndex=0;render();};$('previous-page').onclick=()=>{pageIndex--;render();};$('next-page').onclick=()=>{pageIndex++;render();};
 $('pause').onclick=async()=>{$('pause').disabled=true;try{await invoke('set_paused',{paused:!paused});await refresh();}catch(e){showError(e);$('pause').disabled=false;}};
@@ -246,6 +246,4 @@ $('settings-form').oninput=()=>{settingsDirty=true;$('settings-message').textCon
 $('settings-form').onsubmit=async e=>{e.preventDefault();const b=$('save-settings');b.disabled=true;$('settings-message').textContent='保存中…';$('settings-message').dataset.error='false';const next={interval_minutes:Number($('interval').value),idle_minutes:Number($('idle').value),excluded_apps:$('excluded').value.split('\n').map(v=>v.trim()).filter(Boolean)};try{settings=await invoke('save_settings',{settings:next});settingsDirty=false;fillSettings();$('settings-message').textContent='保存しました。';await refresh();}catch(x){$('settings-message').textContent=String(x);$('settings-message').dataset.error='true';}finally{b.disabled=false;}};
 $('autostart').onchange=async()=>{const enabled=$('autostart').checked;$('autostart').disabled=true;$('autostart-message').textContent='変更中…';$('autostart-message').dataset.error='false';try{await invoke('set_autostart',{enabled});$('autostart-message').textContent=enabled?'次回のログインから自動で起動します。':'自動起動を解除しました。';}catch(e){$('autostart').checked=!enabled;$('autostart-message').textContent=String(e);$('autostart-message').dataset.error='true';}finally{$('autostart').disabled=false;}};
 $('request-accessibility').onclick=async()=>{$('request-accessibility').disabled=true;try{await invoke('request_accessibility_permission');$('accessibility-message').textContent='システム設定でWorklogを有効にし、アプリを再起動してください。';setTimeout(loadAccessibility,1500);}catch(e){$('accessibility-message').textContent=String(e);$('request-accessibility').disabled=false;}};
-$('export').onclick=()=>{$('memo-text').value=`${$('date').value} 稼働メモ\n※記録間隔から推定した時間です。記録と記録の間の作業は含まれません。\n\n${blocksOldestFirst.map(b=>`${timeRange(b)} (${formatDuration(b.seconds)})  ${b.status==='idle'?'離席・操作なし':`[${b.project||'未分類'}] ${b.app} — ${blockTitle(b)}`}`).join('\n')}`;$('copy-status').textContent='';$('memo').showModal();};
-$('close-memo').onclick=()=>$('memo').close();$('copy').onclick=async()=>{try{await navigator.clipboard.writeText($('memo-text').value);$('copy-status').textContent='コピーしました。';}catch{$('memo-text').select();$('copy-status').textContent='⌘C または Ctrl+C でコピーしてください。';}};
-$('quit').onclick=async()=>{$('quit').disabled=true;await invoke('quit_app');};window.addEventListener('hashchange',switchPage);switchPage();refresh();setInterval(()=>{if(!$('classify').open&&!$('unclassify').open&&!$('memo').open&&!settingsDirty)refresh();},15000);
+$('quit').onclick=async()=>{$('quit').disabled=true;await invoke('quit_app');};window.addEventListener('hashchange',switchPage);switchPage();refresh();setInterval(()=>{if(!$('classify').open&&!$('unclassify').open&&!settingsDirty)refresh();},15000);

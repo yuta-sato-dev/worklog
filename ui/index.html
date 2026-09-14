@@ -14,7 +14,7 @@
 <main class="main-shell">
   <header class="topbar"><h1 id="page-title">ダッシュボード</h1><div class="record-controls"><span id="status" role="status">接続中</span><button id="pause" class="quiet-button" disabled>一時停止</button></div></header>
   <div id="error" role="alert" hidden></div>
-  <div id="shared-day-toolbar" class="day-toolbar"><div class="date-controls"><button id="previous-day" class="icon-button" aria-label="前の日">‹</button><label class="sr-only" for="date">表示する日付</label><input id="date" type="date" required><button id="next-day" class="icon-button" aria-label="次の日">›</button><button id="today" class="quiet-button">今日</button></div><button id="export" class="primary" disabled>稼働メモを作る</button></div>
+  <div id="shared-day-toolbar" class="day-toolbar"><div class="date-controls"><button id="previous-day" class="icon-button" aria-label="前の日">‹</button><label class="sr-only" for="date">表示する日付</label><input id="date" type="date" required><button id="next-day" class="icon-button" aria-label="次の日">›</button><button id="today" class="quiet-button">今日</button></div></div>
   <div id="dashboard-page" class="page">
     <div class="metrics" aria-label="選択日の集計">
       <div><span>作業時間</span><strong id="work-time">—</strong><small>推定</small></div>
@@ -31,7 +31,7 @@
       </section>
       <aside class="dashboard-aside">
         <section class="panel" aria-labelledby="projects-heading"><div class="panel-heading"><h2 id="projects-heading">プロジェクト</h2></div><div id="project-list"></div></section>
-        <section class="record-info" aria-label="記録状況"><p id="last">まだ記録がありません</p><p id="next-capture" class="muted"></p><p class="muted">時間は記録間隔からの推定です。実際の作業内容は稼働メモで補えます。</p></section>
+        <section class="record-info" aria-label="記録状況"><p id="last">まだ記録がありません</p><p id="next-capture" class="muted"></p><p class="muted">時間は記録間隔からの推定です。</p></section>
       </aside>
     </div>
   </div>
@@ -67,16 +67,17 @@
     <section class="panel settings-panel" aria-labelledby="rules-heading"><div class="panel-heading"><h2 id="rules-heading">分類ルール</h2><span id="rule-count" class="muted"></span></div><p class="panel-description">同じアプリ・タイトルの記録を、指定のプロジェクトにまとめます。新しいルールが優先されます。</p><div id="rules"></div></section>
     <section class="panel settings-panel" aria-labelledby="data-heading"><div class="panel-heading"><h2 id="data-heading">データと権限</h2></div><div class="panel-content"><p>記録はこの端末だけに保存します。本文・画面の画像・キー入力は保存しません。</p><div id="accessibility-row" class="permission-card" hidden><div><strong id="accessibility-label">アクセシビリティを確認中</strong><p id="accessibility-message">アプリ名とウィンドウタイトルの取得に使います。</p><p id="accessibility-executable" class="path"></p></div><button id="request-accessibility" type="button" class="primary">許可を設定</button></div><label for="database">保存先</label><p id="database" class="path"></p><details><summary>タイトルを取得できないとき</summary><p>Macでは、この画面の「許可を設定」を押して、表示されたシステム設定でWorklogを有効にしてください。開発版とインストール版は別のアプリとして扱われます。許可後にWorklogを再起動してください。</p><p>ブラウザは選択中のタブが公開するタイトルを記録します。チャットや書類の名前がタイトルに出ていない場合、その名前は取得できません。</p></details><details><summary>ターミナルのプロジェクト名</summary><p>Macのzshでは、次の設定を <code>~/.zshrc</code> に追加して新しいターミナルを開くと、Gitリポジトリ名を記録できます。Gitの外では現在のフォルダ名を使います。</p><pre id="shell-snippet">autoload -Uz add-zsh-hook
 _worklog_title() {
-  local root
-  root=$(git rev-parse --show-toplevel 2&gt;/dev/null) || root="$PWD"
-  root="${root//[$'\e\a\n\r']/}"
-  printf '\033]2;worklog:%s\007' "$root"
+  local worklog_root
+  worklog_root=$(git -C "$PWD" rev-parse --show-toplevel 2&gt;/dev/null) || worklog_root="$PWD"
+  local worklog_dir="${worklog_root//[$'\e\a\n\r']/}"
+  printf '\033]2;worklog:%s\007' "$worklog_dir"
 }
-add-zsh-hook precmd _worklog_title</pre><p>ターミナルやテーマがタイトルを上書きする場合は調整が必要です。</p></details></div></section>
+add-zsh-hook chpwd _worklog_title
+add-zsh-hook precmd _worklog_title
+_worklog_title</pre><p>ターミナルやテーマがタイトルを上書きする場合は調整が必要です。</p></details></div></section>
     <div class="settings-bottom"><span class="muted">終了すると記録が止まります。</span><button id="quit" class="quiet-button" disabled>Worklogを終了</button></div>
   </div>
 </main>
 <dialog id="classify"><form id="rule-form"><h2>プロジェクトに分類</h2><p class="muted">この条件に一致する過去と今後の記録に適用します。</p><input name="app" type="hidden"><input name="contains" type="hidden"><div class="readonly-field"><span>アプリ名</span><p id="classify-app"></p></div><div class="readonly-field"><span>タイトル</span><p id="classify-title"></p></div><div id="title-segments" class="title-segments" role="group" aria-label="タイトル条件の候補" hidden></div><label id="custom-contains-label" hidden>候補にない文字列<input id="custom-contains" maxlength="500" aria-describedby="classify-match classify-warning classify-examples"></label><p id="classify-match" class="classify-match" aria-live="polite"></p><p id="classify-warning" class="classify-warning" aria-live="polite" role="status"></p><p id="classify-examples" class="classify-examples"></p><label>プロジェクト名<input name="project" required maxlength="120" placeholder="例：サイトのリニューアル"></label><p id="rule-error" role="alert"></p><div class="actions"><button type="button" id="cancel-rule">キャンセル</button><button type="submit" class="primary">ルールを保存</button></div></form></dialog>
 <dialog id="unclassify"><form id="unclassify-form"><h2>分類ルールを削除</h2><p class="muted">このルールによる分類を解除します。</p><div class="rule-removal-summary"><p id="unclassify-rule"></p><p id="unclassify-count"></p><p>ほかの日の記録にも影響します。削除後はタイトルからの推定、または未分類に戻ります。</p></div><p id="unclassify-error" role="alert"></p><div class="actions"><button type="button" id="cancel-unclassify">キャンセル</button><button type="submit" class="primary">削除して解除</button></div></form></dialog>
-<dialog id="memo"><h2>稼働メモ</h2><p class="note">選択日のまとまりです。推定時間を確認しながら実際の作業内容を補って使えます。</p><label class="sr-only" for="memo-text">稼働メモの内容</label><textarea id="memo-text" rows="15"></textarea><p id="copy-status" role="status"></p><div class="actions"><button id="close-memo">閉じる</button><button id="copy" class="primary">コピー</button></div></dialog>
 </body></html>

@@ -1,7 +1,3 @@
-/* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4
- * genre: modern-minimal · macrostructure: compact dashboard
- * design-system: design.md · designed-as-app · theme: Cobalt
- * states: default, hover, focus, active, disabled, loading, error, success */
 [hidden] { display: none !important; }
 .dashboard-app { font-size: var(--text-body); line-height: 1.6; }
 .dashboard-app h1 { font-size: var(--text-heading); letter-spacing: -.035em; margin: 0; }
@@ -32,7 +28,7 @@
 .page { padding: var(--space-lg) var(--space-xl) var(--space-xl); max-width: 1580px; margin: auto; }
 .page section { margin-bottom: 0; }
 .day-toolbar,.date-controls { display: flex; align-items: center; gap: var(--space-sm); }
-.day-toolbar { justify-content: space-between; gap: var(--space-md); margin-bottom: var(--space-lg); }
+.day-toolbar { justify-content: flex-start; flex-wrap: wrap; gap: var(--space-md); margin-bottom: var(--space-lg); }
 #shared-day-toolbar { max-width: 1580px; margin: 0 auto; padding: var(--space-lg) var(--space-xl) 0; }
 .date-controls input { background: var(--color-transparent); border-color: var(--color-transparent); font-size: var(--text-body); width: 152px; padding-inline: var(--space-2xs); }
 .icon-button { width: 40px; padding: 0; font-size: 22px !important; flex-shrink: 0; }
