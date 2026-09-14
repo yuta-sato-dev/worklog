@@ -22,4 +22,4 @@ case "$(uname -s)" in
 esac
 
 cargo tauri build --bundles "$bundles" -- --locked
-echo 'インストーラー: src-tauri/target/release/bundle/'
+echo 'インストーラー: target/release/bundle/'

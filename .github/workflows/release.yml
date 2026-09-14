@@ -23,11 +23,9 @@ jobs:
         id: version
         shell: python
         run: |
-          import json, os, tomllib
+          import os, tomllib
           from pathlib import Path
-          version = json.loads(Path('src-tauri/tauri.conf.json').read_text())['version']
-          cargo_version = tomllib.loads(Path('src-tauri/Cargo.toml').read_text())['package']['version']
-          assert version == cargo_version, 'Tauri and Cargo versions must match'
+          version = tomllib.loads(Path('Cargo.toml').read_text())['workspace']['package']['version']
           tag = f'v{version}'
           if os.environ['GITHUB_REF'].startswith('refs/tags/'):
               assert os.environ['GITHUB_REF_NAME'] == tag, 'Tag must match the app version'

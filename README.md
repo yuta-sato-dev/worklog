@@ -1,6 +1,6 @@
 # Worklog
 
-Mac・Windowsで前面のアプリとウィンドウタイトルを定期的に端末内へ保存する、Rust + Tauri 2の作業日誌です。日付別のダッシュボードを見返し、稼働メモをコピーできます。
+Mac・Windowsで前面のアプリとウィンドウタイトルを定期的に端末内へ保存する、Rust + Tauri 2の作業日誌です。日付別のダッシュボードとレポートで作業記録を見返せます。
 
 ## 起動
 
@@ -24,14 +24,14 @@ WindowsでWebView2が入っていない場合は、初回インストール時�
 
 macOSでは初回起動時に、インストールしたWorklog自身がアクセシビリティ許可を要求します。「システム設定 → プライバシーとセキュリティ → アクセシビリティ」でWorklogを有効にして、アプリを再起動してください。設定画面の「データと権限」には、許可対象になっている実行ファイルのパスと現在の状態も表示されます。Windowsではこの権限設定は不要です。
 
-画面を閉じてもWorklogは通知領域に常駐し、記録を続けます。終了する場合は通知領域のWorklogメニューから「Worklogを終了」を選びます。設定画面では記録間隔、離席判定、除外アプリ、ログイン時の自動起動を変更できます。
+画面を閉じてもWorklogは通知領域に常駐し、記録を続けます。終了する場合は通知領域のWorklogメニュー、または設定画面から「Worklogを終了」を選びます。設定画面では記録間隔、離席判定、除外アプリ、ログイン時の自動起動を変更できます。
 
 ## 開発環境から起動
 
 Rustに加え、macOSではXcode Command Line Tools、WindowsではMicrosoft C++ Build ToolsとWebView2が必要です。フロントエンドはHTML/CSS/JavaScriptで、Node.jsやフロントエンドのビルドは不要です。
 
 ```sh
-cargo run --manifest-path src-tauri/Cargo.toml
+cargo run -p worklog
 ```
 
 起動約10秒後に初回取得し、その後は設定した間隔で取得します。最初は別の作業アプリへ切り替えて待ってください。Worklog自身が前面の間は記録をスキップします。
@@ -46,9 +46,9 @@ macOSの開発実行では起動元Terminalと、DMGから`/Applications`へイ�
 ./scripts/build-app.sh
 ```
 
-出力先は `src-tauri/target/release/bundle/` です。macOSではDMG、WindowsのGit BashではNSIS形式のsetup.exeを生成します。
+出力先は `target/release/bundle/` です。macOSではDMG、WindowsのGit BashではNSIS形式のsetup.exeを生成します。
 
-## MVP対象と取得する情報
+## 対応アプリと取得する情報
 
 すべてのアプリを共通の前面ウィンドウ取得で扱い、特定アプリだけに制限していません。macOSではAccessibilityのフォーカス中ウィンドウタイトルを優先し、取得できなければCoreGraphicsのウィンドウタイトルへフォールバックします。フォールバックは同一アプリ内の最前面ウィンドウ候補です。Windowsでは前面ウィンドウのアプリ名とタイトルを取得します。必須対象は以下です。
 
@@ -64,7 +64,7 @@ macOSの開発実行では起動元Terminalと、DMGから`/Applications`へイ�
 | Chrome | 同上 | 同上 |
 | Edge | 同上 | 同上 |
 
-アプリ名は部分一致ではなく、大文字小文字を無視した完全一致または製品名にエディション名・年などが続く形式だけで判定します。CursorはVS Code系、Figmaは書類タイトル、Zedは先頭プロジェクト、Adobe XDは書類タイトルの解析があります。形式に合わないタイトル、ようこそ画面、1要素だけでファイル名やダイアログ名と区別できないタイトルはプロジェクト不明として扱います。ただしOffice / iWork / Sketch / Adobe XDは、ウィンドウタイトルからアプリ名・Untitled・拡張子などを除いた名前を主に書類名として扱うため、環境設定などのダイアログが前面にあるとその名前がプロジェクト候補になる場合があります。**各アプリ実機での切り替え・権限を含む動作確認はまだ必要です。** 自動テストはタイトル解析・保存・分類・UIを対象とし、全アプリの実動作を保証するものではありません。
+アプリ名は部分一致ではなく、大文字小文字を無視した完全一致、または製品名にエディション名・年などが続く形式だけで判定します。形式に合わないタイトル、ようこそ画面、1要素だけでファイル名やダイアログ名と区別できないタイトルはプロジェクト不明として扱います。Office / iWork / Sketch / Adobe XDなどの書類系アプリでは、環境設定などのダイアログ名がプロジェクト候補になる場合があります。**各アプリ実機での切り替え・権限を含む動作確認はまだ必要です。**
 
 ブラウザでは全タブを列挙せず、現在選択されているタブのウィンドウタイトルを保存します。ChatGPTがチャット名をタイトルに反映していればその名前が残ります。タイトルが「ChatGPT」のみならチャット名は不明です。URL、ページ本文、スクリーンショット、キー入力は取得・保存しません。アプリ内部にしかないプロジェクト情報を無条件に取得することはできません。
 
@@ -104,27 +104,26 @@ Windows Terminal / PowerShellでは、PowerShellプロファイルに次を追�
 - スリープ・アプリ終了中の記録は作りません。復帰後は次の取得機会から再開し、欠けた時間を埋めません。
 - 一時停止状態・分類ルールは再起動後も維持します。
 - 保存先：macOSは `~/Library/Application Support/jp.local.worklog/worklog.sqlite3`、Windowsは `%APPDATA%\jp.local.worklog\worklog.sqlite3`。SQLite WALを使います。ネットワークへ送信する実装はありません。
-- 稼働メモは選択日のまとまりから古い順に作成します。検索フィルターには連動しません。コピー前に編集できます。
 
-## CLI・cron
+## CLIデバッグ
 
-macOSでは既存の単発CLIも使用できます。`cargo run` は一回取得して同じDBに追記します。`memo.txt` は上書きしません。
+`worklog-core` crate の `cargo run -p worklog-core` は、前面ウィンドウを1回だけ取得してDBに追記するデバッグ用のCLIです。通常はTauriアプリだけを起動してください。アプリと同時に使うと二重記録になります。
 
 ```sh
-cargo build --release
-# 独立した保存先で一回だけ記録
-WORKLOG_DB=/tmp/worklog.sqlite3 ./target/release/fetch-focused-window
+cargo run -p worklog-core
+WORKLOG_DB=/tmp/worklog.sqlite3 cargo run -p worklog-core
 ```
 
-cronで実行する場合はバイナリとDBに絶対パスを指定し、macOSの権限も実行元に設定してください。Tauri側の定期取得とcronを同時に使うと二重記録になります。通常はTauriアプリだけを起動してください。
+`WORKLOG_DB` を指定すると保存先を変えられます。未指定時はどのOSでも `$HOME/Library/Application Support/jp.local.worklog/worklog.sqlite3` を使います。`HOME` がない場合は「HOMEがありません。WORKLOG_DBを指定してください。」で終了します。
 
 ## 開発・検証
 
+ルートのCargo workspaceに `worklog-core` とアプリの `worklog` をまとめています。バージョンの原本はルート `Cargo.toml` の `workspace.package.version` で、両crateが継承します。`Cargo.lock` とビルド成果物の `target/` もルートで共有します。引数なしの `cargo test` はコアのテストだけを実行します。
+
 ```sh
-cargo test
-cargo check --manifest-path src-tauri/Cargo.toml
-cargo fmt --check
-cargo fmt --manifest-path src-tauri/Cargo.toml --check
+cargo test --locked
+cargo check --locked --workspace
+cargo fmt --all --check
 node --check ui/dashboard.js
 zsh -n scripts/terminal-title.zsh
 ```
@@ -139,9 +138,9 @@ PLAYWRIGHT_MODULE=/tmp/worklog-ui-test/node_modules/playwright node scripts/ui-s
 
 既存のChromeを使う場合はブラウザインストールを省き、`CHROME_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"` を実行時に指定できます。通常の依存にPlaywrightがある場合は `node scripts/ui-smoke.cjs` だけで実行できます。
 
-架空の記録を使い、720・768・1000・1120pxのはみ出し、長い名前、HTMLを含むタイトルの安全な表示、検索、分類保存、停止・再開、メモ生成を確認します。Worklogのウィンドウ最小幅は720pxです。画像は一時ディレクトリの `worklog-ui-test/` に保存します（`UI_SCREENSHOT_DIR` で変更可能）。TauriのAPIはモックのため、実際のウィンドウ取得・権限・DB保存・クリップボードはこのテストの対象外です。
+架空の記録を使い、720・768・1000・1120pxのはみ出し、長い名前、HTMLを含むタイトルの安全な表示、検索、分類保存、停止・再開を確認します。Worklogのウィンドウ最小幅は720pxです。画像は一時ディレクトリの `worklog-ui-test/` に保存します（`UI_SCREENSHOT_DIR` で変更可能）。TauriのAPIはモックのため、実際のウィンドウ取得・権限・DB保存はこのテストの対象外です。
 
-`src/lib.rs` が取得・保存・分類、`src-tauri/src/main.rs` が定期取得とUIのAPI、`ui/` が画面です。`tokens.css` がデザイントークンの原本です。変更時は `cp tokens.css ui/tokens.css` で配布用にも反映してください。
+`crates/worklog-core/src/` が取得・保存・分類・集計のコア、`src-tauri/src/main.rs` が定期取得とUIのAPI、`ui/` が画面です。デザイントークンの原本は `ui/tokens.css` です。
 
 Tauriの構成は[公式ドキュメント](https://v2.tauri.app/develop/)に基づき、静的フロントエンドをバンドルしています。
 
@@ -166,4 +165,4 @@ base64 -i AuthKey_XXXXXXXXXX.p8 | tr -d '\n' | pbcopy
 
 macOS向けにDeveloper ID証明書で署名する場合はnotarizationが必要です。6つのSecretsがすべて未設定の場合、CIは公証なしのDMGを作って公開します。一部だけ設定されている場合は、設定漏れとしてCIを失敗させます。
 
-開発中にこのMacだけでアクセシビリティ許可を安定させたい場合は、ログインキーチェーンに `Worklog Local Code Signing` というコード署名IDを作成して使えます。`scripts/build-app.sh` はこの署名IDが存在する場合、macOSビルド時に自動で `APPLE_SIGNING_IDENTITY=Worklog Local Code Signing` を使います。これは他のMacへ配布するための署名ではありません。
+`scripts/build-app.sh` は、ログインキーチェーンに `Worklog Local Code Signing` という名前のコード署名IDがあれば、macOSビルド時に `APPLE_SIGNING_IDENTITY=Worklog Local Code Signing` を使います。同じ環境でローカルビルドし直したときにアクセシビリティ許可が外れにくくなりますが、配布用の署名ではありません。

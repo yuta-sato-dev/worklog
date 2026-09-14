@@ -1,11 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-use fetch_focused_window::{Block, DayReport, Rule, Sample, Settings, Store};
 use std::{
     sync::Mutex,
     time::{Duration, Instant},
 };
 use tauri::Manager;
 use tauri_plugin_autostart::ManagerExt;
+use worklog_core::{Block, DayReport, Rule, Sample, Settings, Store};
 
 struct Recorder {
     store: Store,
@@ -42,9 +42,8 @@ fn day_summary(date: String, state: tauri::State<AppState>) -> Result<DaySummary
     let recorder = state.0.lock().map_err(|e| e.to_string())?;
     let samples = recorder.store.day(&date)?;
     let interval_minutes = recorder.store.settings()?.interval_minutes;
-    let blocks =
-        fetch_focused_window::group_samples(&samples, interval_minutes, chrono::Utc::now());
-    let report = fetch_focused_window::day_report(&blocks);
+    let blocks = worklog_core::group_samples(&samples, interval_minutes, chrono::Utc::now());
+    let report = worklog_core::day_report(&blocks);
     Ok(DaySummary { blocks, report })
 }
 #[tauri::command]
@@ -138,7 +137,7 @@ fn set_autostart(enabled: bool, app: tauri::AppHandle) -> Result<(), String> {
 fn accessibility_status() -> AccessibilityStatus {
     AccessibilityStatus {
         supported: cfg!(target_os = "macos"),
-        trusted: fetch_focused_window::accessibility_trusted(false),
+        trusted: worklog_core::accessibility_trusted(false),
         executable: std::env::current_exe()
             .map(|path| path.display().to_string())
             .unwrap_or_default(),
@@ -146,7 +145,7 @@ fn accessibility_status() -> AccessibilityStatus {
 }
 #[tauri::command]
 fn request_accessibility_permission() -> AccessibilityStatus {
-    let trusted = fetch_focused_window::accessibility_trusted(true);
+    let trusted = worklog_core::accessibility_trusted(true);
     #[cfg(target_os = "macos")]
     if !trusted {
         let _ = std::process::Command::new("open")
@@ -245,7 +244,7 @@ fn main() {
                 show_main(app.handle());
                 // Register the installed app itself with macOS TCC. A `cargo run`
                 // process and /Applications/Worklog.app are separate clients.
-                let _ = fetch_focused_window::accessibility_trusted(true);
+                let _ = worklog_core::accessibility_trusted(true);
             }
             else if let Some(window) = app.get_webview_window("main") { window.hide()?; }
             let handle = app.handle().clone();
@@ -261,7 +260,7 @@ fn main() {
                         Err(e) => { recorder.last_error = Some(e); continue; }
                     }
                 };
-                let captured = fetch_focused_window::capture_with_settings(&settings);
+                let captured = worklog_core::capture_with_settings(&settings);
                 let Ok(mut recorder) = state.0.lock() else { continue; };
                 match recorder.store.paused() { Ok(true) => continue, Err(e) => { recorder.last_error = Some(e); continue; }, Ok(false) => {} }
                 // Settings or a pause can change while Accessibility is responding.

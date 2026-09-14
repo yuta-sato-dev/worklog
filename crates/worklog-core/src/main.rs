@@ -1,5 +1,5 @@
-use fetch_focused_window::{Store, capture_with_settings};
 use std::path::PathBuf;
+use worklog_core::{Store, capture_with_settings};
 fn main() -> Result<(), String> {
     let path = match std::env::var_os("WORKLOG_DB") {
         Some(path) => PathBuf::from(path),
