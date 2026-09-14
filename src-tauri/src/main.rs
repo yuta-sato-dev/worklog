@@ -276,6 +276,7 @@ fn main() {
                                     "title_unavailable" => Some("前面アプリのタイトルを取得できませんでした。対象アプリがタイトルを公開していないか、ウィンドウがない可能性があります。".into()),
                                     _ => None,
                                 };
+                                if let Err(e) = recorder.store.delete_expired(sample.timestamp) { recorder.last_error = Some(e); }
                             }
                             Err(e) => recorder.last_error = Some(e),
                         }

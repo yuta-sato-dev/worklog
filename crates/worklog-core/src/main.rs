@@ -18,6 +18,7 @@ fn main() -> Result<(), String> {
         return Ok(());
     }
     store.append(&sample)?;
+    store.delete_expired(sample.timestamp)?;
     println!(
         "{}",
         serde_json::to_string_pretty(&sample).map_err(|e| e.to_string())?

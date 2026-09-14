@@ -1,8 +1,18 @@
 use crate::model::{Result, Rule, Sample, Settings};
 use crate::project::project_from_title;
-use chrono::{Local, Utc};
+use chrono::{DateTime, Local, Months, NaiveDate, TimeZone, Utc};
 use rusqlite::{Connection, params};
 use std::path::Path;
+
+const RETENTION_MONTHS: u32 = 1;
+
+fn local_day_start(date: NaiveDate) -> Result<String> {
+    Local
+        .from_local_datetime(&date.and_hms_opt(0, 0, 0).unwrap())
+        .earliest()
+        .map(|t| t.with_timezone(&Utc).to_rfc3339())
+        .ok_or("このタイムゾーンの日付境界を解決できません".to_string())
+}
 
 pub struct Store(Connection);
 impl Store {
@@ -52,20 +62,26 @@ impl Store {
             .map_err(|e| e.to_string())?;
         Ok(())
     }
+    /// Deletes samples from before the local day one month before `now`.
+    /// Cutting at the start of a day keeps the oldest remaining day complete.
+    pub fn delete_expired(&self, now: DateTime<Utc>) -> Result<usize> {
+        let oldest_day = now
+            .with_timezone(&Local)
+            .date_naive()
+            .checked_sub_months(Months::new(RETENTION_MONTHS))
+            .ok_or("日付が範囲外です")?;
+        self.0
+            .execute(
+                "DELETE FROM samples WHERE timestamp < ?1",
+                [local_day_start(oldest_day)?],
+            )
+            .map_err(|e| e.to_string())
+    }
     pub fn day(&self, date: &str) -> Result<Vec<Sample>> {
-        use chrono::TimeZone;
-        let parsed =
-            chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").map_err(|e| e.to_string())?;
+        let parsed = NaiveDate::parse_from_str(date, "%Y-%m-%d").map_err(|e| e.to_string())?;
         let next = parsed.succ_opt().ok_or("日付が範囲外です")?;
-        let boundary = |d: chrono::NaiveDate| {
-            Local
-                .from_local_datetime(&d.and_hms_opt(0, 0, 0).unwrap())
-                .earliest()
-                .map(|t| t.with_timezone(&Utc).to_rfc3339())
-                .ok_or("このタイムゾーンの日付境界を解決できません".to_string())
-        };
-        let start = boundary(parsed)?;
-        let end = boundary(next)?;
+        let start = local_day_start(parsed)?;
+        let end = local_day_start(next)?;
         let rules = self.rules()?;
         let mut stmt = self.0.prepare("SELECT id,data FROM samples WHERE timestamp >= ?1 AND timestamp < ?2 ORDER BY timestamp,id").map_err(|e| e.to_string())?;
         let rows = stmt
@@ -228,6 +244,32 @@ mod tests {
         assert!(store.paused().unwrap());
         store.set_paused(false).unwrap();
         assert!(!store.paused().unwrap());
+    }
+
+    #[test]
+    fn delete_expired_keeps_whole_days_from_one_month_ago() {
+        let store = Store::open(Path::new(":memory:")).unwrap();
+        let local = |month: u32, day: u32, hour: u32, minute: u32| {
+            Local
+                .with_ymd_and_hms(2026, month, day, hour, minute, 0)
+                .unwrap()
+                .with_timezone(&Utc)
+        };
+        let now = local(9, 15, 12, 0);
+        for timestamp in [local(8, 14, 23, 59), local(8, 15, 0, 0), now] {
+            store
+                .append(&Sample {
+                    timestamp,
+                    ..sample_at(0, 0, "Code", "main.rs")
+                })
+                .unwrap();
+        }
+
+        assert_eq!(store.delete_expired(now).unwrap(), 1);
+
+        assert!(store.day("2026-08-14").unwrap().is_empty());
+        assert_eq!(store.day("2026-08-15").unwrap().len(), 1);
+        assert_eq!(store.day("2026-09-15").unwrap().len(), 1);
     }
 
     #[test]
