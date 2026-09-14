@@ -4,13 +4,13 @@ This system applies to the dashboard and settings views within the existing sing
 
 ## Direction
 
-Modern-minimal, utilitarian. Keep the existing Cobalt accent and native Japanese typography. The dashboard uses a compact app shell: navigation rail, one toolbar, a metrics strip, activity table, and project summary. The report view uses the same shell for estimated day totals and project breakdowns. Settings uses grouped form rows in the same shell. No hero, marketing copy, decorative imagery, or animated charts. Estimated time must be labelled as 推定.
+Modern-minimal, utilitarian. Keep the existing Cobalt accent and native Japanese typography. The dashboard uses a compact app shell: navigation rail, one toolbar, an estimated time metrics strip, activity table, and project summary. The report view uses the same shell for estimated day totals and project breakdowns. Settings uses grouped form rows in the same shell. No hero, marketing copy, decorative imagery, or animated charts. Estimated time must be labelled as 推定.
 
 ## Shared system
 
 `tokens.css` is authoritative and is copied to `ui/tokens.css` for the static Tauri bundle. Use semantic color tokens. Headings are upright, 16–24px. Body text is 13–14px; mono is reserved for times/counts. Four-point spacing scale, 6px controls, 10px panels. Dark text and muted text must retain 4.5:1 contrast on light surfaces. Use native controls and immediate visible focus outlines. Motion is off. Hover changes background only. No remote font dependencies.
 
-All views share the compact sidebar, status, button styles, colors, type, and content width. On small screens, navigation becomes horizontal and the activity table becomes labelled rows. All controls have accessible names. Observations are samples; grouped timeline durations and report totals are shown only as estimated time, never as exact working time.
+All views share the compact sidebar, status, button styles, colors, type, and content width. The desktop window minimum width is 720px; in narrow desktop windows at 800px and below, navigation becomes horizontal while the activity table remains a column-aligned table. All controls have accessible names. Observations are samples; grouped timeline durations and report totals are shown only as estimated time, never as exact working time.
 
 ## Interaction
 

@@ -51,7 +51,10 @@ function activityRow(b){
   const project=el('div','','project-cell'); project.append(el('span',idle?'—':b.project||'未分類','project-name'));
   if(!idle)project.append(el('span',b.source==='rule'?'分類ルール':b.project?'タイトルから推定':'プロジェクト不明','source-name'));
   row.append(clock,detail,project);
-  if(!canClassify)row.append(document.createElement('span')); else { const button=el('button','分類','classify-button quiet-button'); button.type='button'; button.setAttribute('aria-label',`${timeRange(b)}の記録を分類`); button.onclick=()=>classify(b); row.append(button); }
+  const actions=el('div','','activity-actions');
+  if(canClassify){ const button=el('button','分類','classify-button quiet-button'); button.type='button'; button.setAttribute('aria-label',`${timeRange(b)}の記録を分類`); button.onclick=()=>classify(b); actions.append(button); }
+  if(b.source==='rule'){ const rule=matchedRule(b); if(rule){ const button=el('button','分類解除','classify-button quiet-button'); button.type='button'; button.setAttribute('aria-label',`${timeRange(b)}の記録を分類解除`); button.onclick=()=>unclassify(rule); actions.append(button); } }
+  row.append(actions);
   return row;
 }
 function renderReport(){
@@ -81,7 +84,8 @@ function renderReport(){
 }
 function render(){
   const work=samples.filter(s=>s.status!=='idle');
-  $('count').textContent=work.length; $('project-count').textContent=new Set(work.map(s=>s.project).filter(Boolean)).size; $('app-count').textContent=new Set(work.map(s=>s.app).filter(Boolean)).size; $('interval-display').textContent=settings.interval_minutes;
+  $('work-time').textContent=formatDuration(report.work_seconds);
+  $('unclassified-time').textContent=formatDuration(report.projects.filter(p=>p.project===null).reduce((sum,p)=>sum+p.seconds,0));
   renderProjects(work); renderReport(); $('active-filter').hidden=!selectedProject; $('filter-label').textContent=selectedProject?`プロジェクト：${selectedProject}`:'';
   const filtered=filteredRows(), pageCount=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE)); pageIndex=Math.min(pageIndex,pageCount-1);
   const visible=filtered.slice(pageIndex*PAGE_SIZE,(pageIndex+1)*PAGE_SIZE); $('entries').replaceChildren(...visible.map(activityRow));
@@ -150,11 +154,17 @@ function matchingSamples(app,contains){
 function ruleMatches(sample,rule){
   return sample.status!=='idle'&&sample.app===rule.app&&String(sample.title||'').includes(rule.contains);
 }
+function matchedRule(sample){
+  // rules is ORDER BY id DESC, same as Store::day, so the first match is the applied rule.
+  return rules.find(rule=>ruleMatches(sample,rule));
+}
 function classifyWarning(app,contains,matches){
   const value=contains.trim();
   if(!value)return '';
+  const sampleMiss=!ruleMatches(currentClassifyBlock,{app,contains:value});
   const duplicate=rules.find(rule=>rule.app===app&&rule.contains===value);
   if(duplicate)return `同じ条件のルールがすでにあります（→ ${duplicate.project}）。保存すると重複します。`;
+  if(sampleMiss)return 'この記録のタイトルには含まれていないため、この記録はこのルールでは分類されません';
   const groups=new Map();
   for(const match of matches){
     const rule=rules.find(r=>ruleMatches(match,r));
@@ -170,16 +180,24 @@ function classifyWarning(app,contains,matches){
   const labels=sorted.slice(0,2).map(({rule})=>`「${rule.contains}」で「${rule.project}」`).join('、');
   return `このうち ${total}件は、既存のルール${labels}に分類されています。保存すると新しいルールが優先されます。`;
 }
+let currentClassifyBlock=null, currentUnclassifyRule=null;
 function classify(block){
-  const f=$('rule-form'), contains=f.elements.contains, segments=titleSegments(block.title), segmentGroup=$('title-segments');
+  currentClassifyBlock=block;
+  const f=$('rule-form'), contains=f.elements.contains, custom=$('custom-contains'), customLabel=$('custom-contains-label'), segments=titleSegments(block.title), segmentGroup=$('title-segments');
   f.elements.app.value=block.app;
+  $('classify-app').textContent=block.app;
+  $('classify-title').textContent=blockTitle(block);
   const splitSegments=segments.filter(segment=>segment!==String(block.title||'').trim());
   contains.value=splitSegments.length?splitSegments[splitSegments.length-1]:segments[0]||block.title;
+  custom.value='';
+  customLabel.hidden=true;
   f.elements.project.value=block.project||'';
   $('rule-error').textContent='';
   const updatePreview=()=>{
     const value=contains.value.trim();
     segmentGroup.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.value===value)));
+    const customOpen=!customLabel.hidden;
+    segmentGroup.querySelectorAll('[data-custom]').forEach(b=>{b.setAttribute('aria-expanded',String(customOpen));b.setAttribute('aria-pressed',String(customOpen));});
     const matches=matchingSamples(block.app,value);
     $('classify-match').textContent=value?(matches.length?`表示中の日の記録 ${matches.length}件に一致します`:'表示中の日の記録には一致しません（ほかの日の記録には一致する場合があります）'):'';
     $('classify-warning').textContent=classifyWarning(block.app,value,matches);
@@ -191,20 +209,36 @@ function classify(block){
     }
     $('classify-examples').replaceChildren(...(value&&examples.length?[el('span',`例：${examples.join(' / ')}`)]:[]));
   };
-  segmentGroup.replaceChildren(...segments.map(segment=>{
+  const segmentButtons=segments.map(segment=>{
     const button=el('button',segment);
     button.type='button';
     button.dataset.value=segment;
-    button.onclick=()=>{contains.value=segment;updatePreview();};
+    button.onclick=()=>{contains.value=segment;custom.value=segment;customLabel.hidden=true;updatePreview();};
     return button;
-  }));
-  segmentGroup.hidden=segments.length<2;
+  });
+  const customButton=el('button','候補にない文字列を入力');
+  customButton.type='button';
+  customButton.dataset.custom='true';
+  customButton.setAttribute('aria-controls','custom-contains');
+  customButton.setAttribute('aria-expanded','false');
+  customButton.onclick=()=>{customLabel.hidden=false;contains.value=custom.value;updatePreview();custom.focus();};
+  segmentGroup.replaceChildren(...segmentButtons,customButton);
+  segmentGroup.hidden=!segments.length;
+  custom.oninput=()=>{contains.value=custom.value;updatePreview();};
   updatePreview();
   $('classify').showModal();
 }
+function unclassify(rule){
+  currentUnclassifyRule=rule;
+  $('unclassify-rule').textContent=`${rule.app} / 「${rule.contains}」を含む → ${rule.project}`;
+  $('unclassify-count').textContent=`表示中の日で、このルールに一致する記録 ${samples.filter(s=>ruleMatches(s,rule)).length}件`;
+  $('unclassify-error').textContent='';
+  $('unclassify').showModal();
+}
 
-$('rule-form').onsubmit=async e=>{e.preventDefault();e.submitter.disabled=true;try{await invoke('add_rule',Object.fromEntries(new FormData(e.currentTarget)));$('classify').close();await refresh();}catch(x){$('rule-error').textContent=String(x);}finally{e.submitter.disabled=false;}};
-$('cancel-rule').onclick=()=>$('classify').close(); $('classify').onclick=e=>{if(e.target===$('classify'))$('classify').close();}; $('memo').onclick=e=>{if(e.target===$('memo'))$('memo').close();};
+$('rule-form').onsubmit=async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.currentTarget));data.contains=String(data.contains||'').trim();if(!data.contains){$('rule-error').textContent='タイトルに含まれる文字列を入力してください。';return;}e.submitter.disabled=true;try{await invoke('add_rule',data);$('classify').close();await refresh();}catch(x){$('rule-error').textContent=String(x);}finally{e.submitter.disabled=false;}};
+$('unclassify-form').onsubmit=async e=>{e.preventDefault();if(!currentUnclassifyRule)return;e.submitter.disabled=true;try{await invoke('delete_rule',{id:currentUnclassifyRule.id});$('unclassify').close();await refresh();}catch(x){$('unclassify-error').textContent=String(x);}finally{e.submitter.disabled=false;}};
+$('cancel-rule').onclick=()=>$('classify').close(); $('cancel-unclassify').onclick=()=>$('unclassify').close(); $('classify').onclick=e=>{if(e.target===$('classify'))$('classify').close();}; $('unclassify').onclick=e=>{if(e.target===$('unclassify'))$('unclassify').close();}; $('memo').onclick=e=>{if(e.target===$('memo'))$('memo').close();};
 $('previous-day').onclick=()=>moveDate(-1);$('next-day').onclick=()=>moveDate(1);$('today').onclick=()=>{$('date').value=localDate(new Date());selectedProject='';pageIndex=0;refresh();};
 $('date').onchange=()=>{selectedProject='';pageIndex=0;refresh();};$('refresh').onclick=refresh;$('search').oninput=()=>{pageIndex=0;render();};$('app-filter').onchange=()=>{pageIndex=0;render();};$('clear-filter').onclick=()=>{selectedProject='';pageIndex=0;render();};$('previous-page').onclick=()=>{pageIndex--;render();};$('next-page').onclick=()=>{pageIndex++;render();};
 $('pause').onclick=async()=>{$('pause').disabled=true;try{await invoke('set_paused',{paused:!paused});await refresh();}catch(e){showError(e);$('pause').disabled=false;}};
@@ -214,4 +248,4 @@ $('autostart').onchange=async()=>{const enabled=$('autostart').checked;$('autost
 $('request-accessibility').onclick=async()=>{$('request-accessibility').disabled=true;try{await invoke('request_accessibility_permission');$('accessibility-message').textContent='システム設定でWorklogを有効にし、アプリを再起動してください。';setTimeout(loadAccessibility,1500);}catch(e){$('accessibility-message').textContent=String(e);$('request-accessibility').disabled=false;}};
 $('export').onclick=()=>{$('memo-text').value=`${$('date').value} 稼働メモ\n※記録間隔から推定した時間です。記録と記録の間の作業は含まれません。\n\n${blocksOldestFirst.map(b=>`${timeRange(b)} (${formatDuration(b.seconds)})  ${b.status==='idle'?'離席・操作なし':`[${b.project||'未分類'}] ${b.app} — ${blockTitle(b)}`}`).join('\n')}`;$('copy-status').textContent='';$('memo').showModal();};
 $('close-memo').onclick=()=>$('memo').close();$('copy').onclick=async()=>{try{await navigator.clipboard.writeText($('memo-text').value);$('copy-status').textContent='コピーしました。';}catch{$('memo-text').select();$('copy-status').textContent='⌘C または Ctrl+C でコピーしてください。';}};
-$('quit').onclick=async()=>{$('quit').disabled=true;await invoke('quit_app');};window.addEventListener('hashchange',switchPage);switchPage();refresh();setInterval(()=>{if(!$('classify').open&&!$('memo').open&&!settingsDirty)refresh();},15000);
+$('quit').onclick=async()=>{$('quit').disabled=true;await invoke('quit_app');};window.addEventListener('hashchange',switchPage);switchPage();refresh();setInterval(()=>{if(!$('classify').open&&!$('unclassify').open&&!$('memo').open&&!settingsDirty)refresh();},15000);

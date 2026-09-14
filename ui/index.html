@@ -17,10 +17,8 @@
   <div id="shared-day-toolbar" class="day-toolbar"><div class="date-controls"><button id="previous-day" class="icon-button" aria-label="前の日">‹</button><label class="sr-only" for="date">表示する日付</label><input id="date" type="date" required><button id="next-day" class="icon-button" aria-label="次の日">›</button><button id="today" class="quiet-button">今日</button></div><button id="export" class="primary" disabled>稼働メモを作る</button></div>
   <div id="dashboard-page" class="page">
     <div class="metrics" aria-label="選択日の集計">
-      <div><span>作業の記録</span><strong id="count">—</strong><small>サンプル</small></div>
-      <div><span>プロジェクト</span><strong id="project-count">—</strong><small>未分類を除く</small></div>
-      <div><span>アプリ</span><strong id="app-count">—</strong><small>使用した種類</small></div>
-      <div><span>記録間隔</span><strong id="interval-display">—</strong><small>分ごと</small></div>
+      <div><span>作業時間</span><strong id="work-time">—</strong><small>推定</small></div>
+      <div><span>未分類時間</span><strong id="unclassified-time">—</strong><small>推定</small></div>
     </div>
     <div class="dashboard-grid">
       <section class="panel activity-panel" aria-labelledby="activity-title">
@@ -78,6 +76,7 @@ add-zsh-hook precmd _worklog_title</pre><p>ターミナルやテーマがタイ�
     <div class="settings-bottom"><span class="muted">終了すると記録が止まります。</span><button id="quit" class="quiet-button" disabled>Worklogを終了</button></div>
   </div>
 </main>
-<dialog id="classify"><form id="rule-form"><h2>プロジェクトに分類</h2><p class="muted">この条件に一致する過去と今後の記録に適用します。</p><label>アプリ名<input name="app" required readonly></label><div id="title-segments" class="title-segments" role="group" aria-label="タイトルの区切り" hidden></div><label>タイトルに含まれる文字列<input name="contains" required maxlength="500" readonly aria-describedby="classify-match classify-warning classify-examples"></label><p id="classify-match" class="classify-match" aria-live="polite"></p><p id="classify-warning" class="classify-warning" aria-live="polite" role="status"></p><p id="classify-examples" class="classify-examples"></p><label>プロジェクト名<input name="project" required maxlength="120" placeholder="例：サイトのリニューアル"></label><p id="rule-error" role="alert"></p><div class="actions"><button type="button" id="cancel-rule">キャンセル</button><button type="submit" class="primary">ルールを保存</button></div></form></dialog>
+<dialog id="classify"><form id="rule-form"><h2>プロジェクトに分類</h2><p class="muted">この条件に一致する過去と今後の記録に適用します。</p><input name="app" type="hidden"><input name="contains" type="hidden"><div class="readonly-field"><span>アプリ名</span><p id="classify-app"></p></div><div class="readonly-field"><span>タイトル</span><p id="classify-title"></p></div><div id="title-segments" class="title-segments" role="group" aria-label="タイトル条件の候補" hidden></div><label id="custom-contains-label" hidden>候補にない文字列<input id="custom-contains" maxlength="500" aria-describedby="classify-match classify-warning classify-examples"></label><p id="classify-match" class="classify-match" aria-live="polite"></p><p id="classify-warning" class="classify-warning" aria-live="polite" role="status"></p><p id="classify-examples" class="classify-examples"></p><label>プロジェクト名<input name="project" required maxlength="120" placeholder="例：サイトのリニューアル"></label><p id="rule-error" role="alert"></p><div class="actions"><button type="button" id="cancel-rule">キャンセル</button><button type="submit" class="primary">ルールを保存</button></div></form></dialog>
+<dialog id="unclassify"><form id="unclassify-form"><h2>分類ルールを削除</h2><p class="muted">このルールによる分類を解除します。</p><div class="rule-removal-summary"><p id="unclassify-rule"></p><p id="unclassify-count"></p><p>ほかの日の記録にも影響します。削除後はタイトルからの推定、または未分類に戻ります。</p></div><p id="unclassify-error" role="alert"></p><div class="actions"><button type="button" id="cancel-unclassify">キャンセル</button><button type="submit" class="primary">削除して解除</button></div></form></dialog>
 <dialog id="memo"><h2>稼働メモ</h2><p class="note">選択日のまとまりです。推定時間を確認しながら実際の作業内容を補って使えます。</p><label class="sr-only" for="memo-text">稼働メモの内容</label><textarea id="memo-text" rows="15"></textarea><p id="copy-status" role="status"></p><div class="actions"><button id="close-memo">閉じる</button><button id="copy" class="primary">コピー</button></div></dialog>
 </body></html>

@@ -6,7 +6,7 @@
   "build": { "frontendDist": "../ui" },
   "app": {
     "withGlobalTauri": true,
-    "windows": [{ "title": "Worklog — 今日の作業", "width": 1120, "height": 780, "minWidth": 320, "minHeight": 500 }],
+    "windows": [{ "title": "Worklog — 今日の作業", "width": 1120, "height": 780, "minWidth": 720, "minHeight": 500 }],
     "security": { "csp": "default-src 'self'; style-src 'self'; script-src 'self'; connect-src ipc: http://ipc.localhost" }
   },
   "bundle": {
